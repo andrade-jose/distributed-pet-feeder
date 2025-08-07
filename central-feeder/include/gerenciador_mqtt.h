@@ -43,7 +43,7 @@ public:
     
     // Publicação de comandos para remotas
     static bool enviarComandoRemota(int idRemota, String acao, int tempo = 0);
-    static bool enviarComandoGeral(String acao, int tempo = 0, int idRemota = 1); // Novo: comando geral
+    static bool enviarComandoGeral(String acao, int tempo = 0, int idRemota = 1);
     static bool configurarHorarioRemota(int idRemota, int hora, int minuto, int quantidade);
     static bool configurarTempoMovimento(int idRemota, int tempo);
     static bool solicitarStatusRemota(int idRemota);
@@ -68,3 +68,4 @@ public:
     static unsigned long obterUltimoHeartbeat();
     static void resetarTentativasReconexao();
 };
+

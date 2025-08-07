@@ -186,5 +186,3 @@ Se encontrar problemas ou tiver sugestões:
 **📍 Localização:** `/docs/`  
 **📅 Última Atualização:** 02/08/2025  
 **✨ Versão:** 1.0.0  
-
-**🐕🐱 Desenvolvido com ❤️ para pets felizes e bem alimentados!**

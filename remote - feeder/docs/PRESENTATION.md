@@ -616,4 +616,3 @@ mosquitto_sub -h broker.hivemq.cloud -p 8883 \
 > *"A tecnologia deve servir para melhorar a vida dos seres vivos,*  
 > *sejam eles humanos ou nossos companheiros de quatro patas."*
 
-**🐕🐱 Desenvolvido com ❤️ para pets felizes e bem alimentados!**

@@ -64,19 +64,10 @@
 │ > Remota 1: OK     │  ← Conectada
 │   Remota 2: OFF    │  ← Desconectada
 │   Remota 3: OK     │  ← Conectada
-│   [Pagina 1/2]     │  ← Indicador
+│   Voltar           │  ← Indicador
 └────────────────────┘
 ```
 
-## 📡 **TELA Lista de Remotas - Página 2**
-```
-┌────────────────────┐
-│ > Buscar Remotas   │
-│   Voltar           │
-│                    │
-│   [Pagina 2/2]     │  ← Indicador
-└────────────────────┘
-```
 ---
 
 ## 🤖 **TELA Remota Específica**
@@ -128,13 +119,11 @@
 ```
 HOME
 ├── Lista de Remotas
-│   ├── Página 1 (Lista de remotas)
+│   ├── Página (Lista de remotas)
 │   │   └── Remota X
 │   │       └── Refeição Y
 │   │           ├── Editar Hora
 │   │           └── Editar Quantidade
-│   └── Página 2 (Buscar/Voltar)
-│       └── Buscar Remotas
 ├── WiFi (Info apenas)
 └── Config Central
     ├── Ultimo Boot (Info apenas)
@@ -159,16 +148,6 @@ HOME
 
 ---
 
-## 📋 **Validação Necessária**
-
-Por favor, confirme:
-
-1. ✅ **Estrutura das telas** está correta?
-2. ✅ **Navegação** faz sentido?
-3. ✅ **Informações mostradas** são suficientes?
-4. ✅ **Organização dos menus** está lógica?
-5. ✅ **Controles dos botões** estão adequados?
-6. ✅ **Algo faltou** ou precisa ser alterado?
-
 **Após sua validação, implementarei toda essa estrutura de telas!**
+
 

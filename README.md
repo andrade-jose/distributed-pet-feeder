@@ -1,7 +1,3 @@
-Perfeito! Aqui vai uma versão **mais curta e objetiva** do `README.md` para o repositório principal do seu projeto de **alimentador automático de pets** com **ESP32**, Central e Remotas:
-
----
-
 ````md
 # 🐾 Alimentador Automático de Pets – Central + Remotas (ESP32 + MQTT)
 
@@ -60,12 +56,3 @@ alimentador-automatico/
 * Acesso à rede Wi-Fi
 
 ---
-
-Feito com ❤️ para manter seus pets bem alimentados, mesmo quando você estiver longe.
-
-```
-
----
-
-Se quiser, posso adaptar esse texto para um banner no GitHub, uma descrição curta para o repositório, ou quebrar esse README em versões separadas para `central/` e `remota/`. Quer seguir por aí?
-```

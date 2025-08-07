@@ -77,17 +77,6 @@
 │   [Pagina 2/2]     │  ← Indicador
 └────────────────────┘
 ```
-
-### 🔍 **Sub-tela: Buscar Remotas**
-```
-┌────────────────────┐
-│ Procurando...      │
-│ ████████░░ 80%     │  ← Barra de progresso
-│                    │
-│                    │
-└────────────────────┘
-```
-
 ---
 
 ## 🤖 **TELA Remota Específica**
@@ -182,3 +171,4 @@ Por favor, confirme:
 6. ✅ **Algo faltou** ou precisa ser alterado?
 
 **Após sua validação, implementarei toda essa estrutura de telas!**
+

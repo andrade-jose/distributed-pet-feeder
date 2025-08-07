@@ -325,9 +325,6 @@ pio run --target clean
 4. Push para a branch
 5. Abra um Pull Request
 
-## 📄 Licença
-
-Este projeto está sob licença MIT. Veja o arquivo `LICENSE` para detalhes.
 
 ## 📞 Suporte
 
@@ -337,5 +334,3 @@ Para dúvidas ou suporte:
 - Verifique a **documentação técnica**
 
 ---
-
-**Desenvolvido com ❤️ para pets felizes e bem alimentados! 🐕🐱**

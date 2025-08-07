@@ -18,10 +18,8 @@ public:
     void pararImediato();                           // para sem delay
     void testar();
     bool estaAtivo();
-    
-    // Novos métodos para servo posicional 180°
     void moverParaAngulo(int angulo);               // Move para ângulo específico (0-180°)
-    void alimentar(int porcao);                     // Alimentação automática (1=pequena, 2=média, 3=grande)
+    void alimentar(int porcao);                     
 
 private:
     Servo servo;
@@ -31,3 +29,4 @@ private:
 };
 
 #endif
+

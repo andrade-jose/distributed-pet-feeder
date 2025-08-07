@@ -44,7 +44,6 @@ Sistema distribuído com ESP32 para alimentação automática de pets, usando ar
 alimentador-automatico/
 ├── central/   → Código da interface e controle
 ├── remota/    → Código das unidades físicas
-├── docs/      → Documentação técnica extra
 └── README.md  → Visão geral do projeto
 ```
 

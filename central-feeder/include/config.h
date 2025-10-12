@@ -64,7 +64,6 @@
 
 // NÃºmero mÃ¡ximo de remotas
 #define MAX_REMOTAS 6
-#define REMOTAS_PER_PAGE 3
 
 // ConfiguraÃ§Ãµes de refeiÃ§Ãµes
 #define REFEICOES_PER_REMOTA 3
@@ -272,12 +271,5 @@
 // Retry counts
 #define WIFI_MAX_RETRIES 3
 // MQTT_MAX_RETRIES já definido acima
-
-// ===== FUNÃ‡Ã•ES DE CACHE E HISTÃ"RICO =====
-// Limpa dados armazenados em Preferences (cache)
-void limparCache();
-
-// Limpa histórico do sistema (operaÃ§Ãµes de limpeza iguais ao cache por enquanto)
-void limparHistorico();
 
 #endif // CONFIG_H

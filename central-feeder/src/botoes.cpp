@@ -3,7 +3,6 @@
 #include <Arduino.h>
 
 // Inicializar variáveis estáticas - debounce individual para cada botão
-unsigned long Botoes::ultimoPressionamento = 0;
 static unsigned long ultimoPressionamentoCima = 0;
 static unsigned long ultimoPressionamentoBaixo = 0;
 static unsigned long ultimoPressionamentoEnter = 0;
@@ -20,37 +19,6 @@ void Botoes::inicializar() {
     Serial.printf("Pino CIMA: %d\n", UP_BUTTON_PIN);
     Serial.printf("Pino BAIXO: %d\n", DOWN_BUTTON_PIN);
     Serial.printf("Pino ENTER: %d\n", ENTER_BUTTON_PIN);
-}
-
-bool Botoes::estaPressionado(int pino) {
-    unsigned long agora = millis();
-
-    // Verificar debounce
-    if (agora - ultimoPressionamento < delayDebounce) {
-        return false;
-    }
-
-    // Ler estado do botão (LOW = pressionado devido ao pull-up)
-    if (digitalRead(pino) == LOW) {
-        ultimoPressionamento = agora;
-        return true;
-    }
-
-    return false;
-}
-
-void Botoes::verificarTodos() {
-    if (estaPressionado(UP_BUTTON_PIN)) {
-        Serial.println("Botão CIMA pressionado");
-    }
-
-    if (estaPressionado(DOWN_BUTTON_PIN)) {
-        Serial.println("Botão BAIXO pressionado");
-    }
-
-    if (estaPressionado(ENTER_BUTTON_PIN)) {
-        Serial.println("Botão ENTER pressionado");
-    }
 }
 
 bool Botoes::cimaPressionado() {

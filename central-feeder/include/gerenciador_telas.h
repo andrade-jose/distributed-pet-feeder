@@ -20,7 +20,8 @@ enum class TipoTela
     REMOTA_ESPECIFICA,
     CONFIG_REFEICAO,
     EDITAR_HORA,
-    EDITAR_QUANTIDADE
+    EDITAR_QUANTIDADE,
+    ALERTA_RACAO_BAIXA  // Já existe - não precisa adicionar
 };
 
 // Estrutura para dados de uma refeição
@@ -39,6 +40,7 @@ struct Remota
     String nome;
     bool conectada;
     unsigned long ultimoHeartbeat; // Timestamp do último heartbeat recebido
+    String nivelRacao;            // Nível atual da ração ("OK", "BAIXO", etc)
     Refeicao refeicoes[REFEICOES_PER_REMOTA];
 };
 
@@ -52,9 +54,13 @@ private:
     static TipoTela telaAtual;
     static TipoTela telaAnterior;
     static int opcaoSelecionada;
-    static int paginaAtual;
+    static int paginaAtual;  // Índice da página atual (0, 1, 2...)
     static int campoEdicao;
     static bool estaEditando;
+
+    // Sistema de paginação dinâmica para remotas
+    static int remotasConectadasCache[MAX_REMOTAS];  // Índices das remotas conectadas
+    static int numRemotasConectadasCache;            // Total de remotas conectadas
 
     // Dados do sistema
     static String wifiSSID;
@@ -79,6 +85,12 @@ private:
     // Controle de verificação automática de horários
     static unsigned long ultimaVerificacaoHorarios;
 
+    // Controle de sistema de alerta de ração
+    static bool alertaRacaoAtivo;
+    static int remotaComAlerta;
+    static unsigned long ultimaPiscadaAlerta;
+    static bool estadoPiscaAlerta;
+
     // Métodos privados para renderização
     static void renderizarInicio();
     static void renderizarInfoWifi();
@@ -87,10 +99,18 @@ private:
     static void renderizarResetar();
     static void renderizarListaRemotasP1();
     static void renderizarListaRemotasP2();
+    static void renderizarListaRemotasPaginada();  // Nova função genérica
     static void renderizarRemotaEspecifica();
     static void renderizarConfigRefeicao();
     static void renderizarEditarHora();
     static void renderizarEditarQuantidade();
+    static void renderizarAlertaRacao();
+    static void navegarAlertaRacao();
+
+    // Métodos auxiliares para paginação
+    static void atualizarCacheRemotasConectadas();
+    static int calcularTotalPaginas();
+    static int obterRemotasVisiveis(int* indicesRemotas, int maxRemotas);
 
     // Métodos privados para navegação
     static void navegarInicio();
@@ -100,6 +120,7 @@ private:
     static void navegarResetar();
     static void navegarListaRemotasP1();
     static void navegarListaRemotasP2();
+    static void navegarListaRemotasPaginada();  // Nova função genérica
     static void navegarRemotaEspecifica();
     static void navegarConfigRefeicao();
     static void navegarEditarHora();
@@ -119,6 +140,13 @@ private:
     // Métodos para persistência
     static void salvarDadosRemota();
     static void carregarDadosRemota();
+
+    // Callbacks
+    static void (*callbackResetSistema)();
+    static void (*callbackAtualizacaoRefeicao)(int, int, int, int, int);
+    
+    // Método auxiliar para verificar timeout de heartbeat
+    static void verificarTimeoutRemotas(unsigned long agora);
 
 public:
     // Inicialização
@@ -160,16 +188,13 @@ public:
     static void definirCallbackResetSistema(void (*callback)());
     static void definirCallbackAtualizacaoRefeicao(void (*callback)(int, int, int, int, int));
     
-    // Callbacks MQTT para atualizar status das remotas
-    static void onStatusRemotaRecebido(int idRemota, String status);
-    static void onVidaRemotaRecebida(int idRemota, bool viva);
-    static void onRespostaRemotaRecebida(int idRemota, String resposta);
-
-private:
-    // Callbacks
-    static void (*callbackResetSistema)();
-    static void (*callbackAtualizacaoRefeicao)(int, int, int, int, int);
+    // Callbacks MQTT - DECLARAÇÕES ADICIONADAS
+    static void onStatusRemotaRecebido(int idRemota, const String& status);
+    static void onVidaRemotaRecebida(int idRemota, const String& status);
+    static void onRespostaRemotaRecebida(int idRemota, const String& resposta);
+    static void onAlertaRacaoRecebido(int idRemota, const String& alerta);
     
-    // Método auxiliar para verificar timeout de heartbeat
-    static void verificarTimeoutRemotas(unsigned long agora);
+    // Outros métodos já existentes
+    static void verificarAlertas();
+    static void sincronizarComPreferences();
 };

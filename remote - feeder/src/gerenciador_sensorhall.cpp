@@ -1,55 +1,84 @@
-#include "SensorHall.h"
+#include "gerenciador_sensorhall.h"
 
-SensorHall::SensorHall()
-{
-    pinoSensor = -1;
-    contador = 0;
+SensorHall::SensorHall() 
+    : pino(-1), estadoAtual(false), estadoAnterior(false), 
+      ultimaLeitura(0), contadorDeteccoes(0), detectandoAtualmente(false) {
+}
+
+void SensorHall::iniciar(int pinoParam) {
+    pino = pinoParam;
+    pinMode(pino, INPUT);
+    
+    estadoAtual = false;
     estadoAnterior = false;
-    sensorAtivo = false;
+    contadorDeteccoes = 0;
+    detectandoAtualmente = false;
+    ultimaLeitura = 0;
+    
+    Serial.printf("🧲 Sensor Hall A3144 iniciado no pino %d\n", pino);
+    Serial.println("   💡 LOW = Ímã detectado, HIGH = Normal");
 }
 
-void SensorHall::iniciar(int pino)
-{
-    pinoSensor = pino;
-    pinMode(pinoSensor, INPUT_PULLUP);
-    sensorAtivo = true;
-    Serial.printf("🧲 Sensor Hall iniciado no pino GPIO %d\n", pinoSensor);
-}
-
-void SensorHall::resetar()
-{
-    contador = 0;
-}
-
-int SensorHall::obterContagem()
-{
-    return contador;
-}
-
-bool SensorHall::estaDetectando()
-{
-    if (pinoSensor == -1)
-        return false;
-    return digitalRead(pinoSensor) == LOW;
-}
-
-bool SensorHall::estaConectado()
-{
-    return (pinoSensor != -1 && sensorAtivo);
-}
-
-void SensorHall::verificar()
-{
-    if (!sensorAtivo)
+void SensorHall::verificar() {
+    unsigned long agora = millis();
+    
+    // Limitar frequência de leitura
+    if (agora - ultimaLeitura < INTERVALO_LEITURA) {
         return;
-
-    bool estadoAtual = digitalRead(pinoSensor) == LOW;
-
-    if (estadoAtual && !estadoAnterior)
-    {
-        contador++;
-        Serial.printf("🔄 Ímã detectado! Contador: %d\n", contador);
     }
-
+    
+    ultimaLeitura = agora;
     estadoAnterior = estadoAtual;
+    
+    // A3144: LOW quando detecta ímã, HIGH quando normal
+    bool leituraDigital = digitalRead(pino);
+    estadoAtual = !leituraDigital; // Inverter para que true = detectando
+    
+    // Detectar mudança de estado
+    if (estadoAtual && !estadoAnterior) {
+        // Começou a detectar
+        contadorDeteccoes++;
+        detectandoAtualmente = true;
+        Serial.printf("🧲 Ímã DETECTADO! (Contagem: %lu)\n", contadorDeteccoes);
+    } else if (!estadoAtual && estadoAnterior) {
+        // Parou de detectar
+        detectandoAtualmente = false;
+        Serial.println("🧲 Ímã removido");
+    }
+}
+
+bool SensorHall::estaDetectando() {
+    return estadoAtual;
+}
+
+bool SensorHall::mudouEstado() {
+    return (estadoAtual != estadoAnterior);
+}
+
+unsigned long SensorHall::obterContador() {
+    return contadorDeteccoes;
+}
+
+void SensorHall::resetarContador() {
+    contadorDeteccoes = 0;
+    Serial.println("🔄 Contador do sensor Hall resetado");
+}
+
+void SensorHall::testar() {
+    Serial.println("🧪 Teste do Sensor Hall A3144");
+    Serial.println("   Aproxime um ímã do sensor...");
+    
+    for (int i = 0; i < 20; i++) {
+        verificar();
+        
+        bool detectando = estaDetectando();
+        Serial.printf("   Leitura %d: %s (pino=%s)\n", 
+                     i + 1, 
+                     detectando ? "ÍMÃ DETECTADO" : "Normal",
+                     digitalRead(pino) ? "HIGH" : "LOW");
+        
+        delay(500);
+    }
+    
+    Serial.printf("✅ Teste concluído. Total de detecções: %lu\n", contadorDeteccoes);
 }

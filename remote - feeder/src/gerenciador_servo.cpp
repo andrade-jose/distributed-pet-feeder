@@ -1,4 +1,4 @@
-#include "ServoControl.h"
+#include "gerenciador_servo.h"
 
 ServoControl::ServoControl()
 {
@@ -94,7 +94,7 @@ void ServoControl::moverParaAngulo(int angulo)
     int micros = map(angulo, 0, 180, 500, 2500);
     
     servo.writeMicroseconds(micros);
-    Serial.printf("📐 Servo movido para %d° (%dμs)\n", angulo, micros);
+    Serial.printf("🔄 Servo movido para %d° (%dμs)\n", angulo, micros);
 }
 
 // Método específico para posições do alimentador

@@ -10,13 +10,13 @@ private:
 public:
     // Inicializar configurações dos botões
     static void inicializar();
-    
+
     // Verificar se um botão específico foi pressionado
     static bool estaPressionado(int pino);
-    
+
     // Verificar todos os botões e imprimir no Serial
     static void verificarTodos();
-    
+
     // Verificar botões individuais
     static bool cimaPressionado();
     static bool baixoPressionado();

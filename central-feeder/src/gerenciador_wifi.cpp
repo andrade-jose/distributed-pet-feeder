@@ -32,12 +32,12 @@ void GerenciadorWifi::inicializar() {
     if (ssidSalvo.length() == 0 && strlen(DEFAULT_WIFI_SSID) > 0) {
         ssidSalvo = DEFAULT_WIFI_SSID;
         senhaSalva = DEFAULT_WIFI_PASSWORD;
-        Serial.println("Usando credenciais padrão do config.h");
+    Serial.println("Usando credenciais padrão do config.h");
     }
     
     // Tentar conectar automaticamente se há credenciais
     if (ssidSalvo.length() > 0) {
-        Serial.println("Tentando conectar automaticamente...");
+    Serial.println("Tentando conectar automaticamente...");
         conectar(ssidSalvo, senhaSalva);
     }
     

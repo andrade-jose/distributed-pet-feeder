@@ -28,12 +28,12 @@ public:
     static String obterDataFormatada();
     static String obterDataTempoFormatado();
     
-    // Configuração manual de hora
+    // ConfiguraÃ§Ã£o manual de hora
     static void definirTempo(int hora, int minuto, int segundo);
     static void definirData(int dia, int mes, int ano);
     static void definirDataTempo(int dia, int mes, int ano, int hora, int minuto, int segundo);
     
-    // Sincronização NTP
+    // SincronizaÃ§Ã£o NTP
     static void sincronizarComNTP();
     static bool sincronizacaoNTPHabilitada();
     static void habilitarSincronizacaoNTP(bool habilitar);
@@ -45,7 +45,7 @@ public:
     static bool tempoValido();
     static String obterStringStatus();
     
-    // Callback para notificação de mudança
+    // Callback para notificaÃ§Ã£o de mudanÃ§a
     static void definirCallbackAtualizacaoTempo(void (*callback)(DadosTempo));
     
 private:
@@ -55,7 +55,7 @@ private:
     // Dados atuais
     static DadosTempo tempoAtual;
     
-    // Controle de sincronização
+    // Controle de sincronizaÃ§Ã£o
     static unsigned long ultimaSincronizacaoNTP;
     static unsigned long ultimaAtualizacaoTempo;
     static bool sincronizacaoNtpHabilitada;
@@ -64,7 +64,7 @@ private:
     // Callback
     static void (*callbackAtualizacaoTempo)(DadosTempo);
     
-    // Métodos privados
+    // MÃ©todos privados
     static void atualizarDoRTC();
     static void atualizarDadosTempo(DateTime dt);
     static String obterNomeDiaSemana(int diaSemana);

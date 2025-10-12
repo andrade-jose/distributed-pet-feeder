@@ -1,514 +1,535 @@
 #include "gerenciador_mqtt.h"
 
-// Inicialização de variáveis estáticas
-WiFiClientSecure GerenciadorMQTT::wifiClient;
-PubSubClient GerenciadorMQTT::mqttClient(wifiClient);
-bool GerenciadorMQTT::conectado = false;
-unsigned long GerenciadorMQTT::ultimoReconectar = 0;
-unsigned long GerenciadorMQTT::ultimoHeartbeat = 0;
-int GerenciadorMQTT::tentativasReconexao = 0;
+// Variáveis estáticas
+GerenciadorMQTT* GerenciadorMQTT::instance = nullptr;
+PicoMQTT::ServerLocalSubscribe* GerenciadorMQTT::broker = nullptr;
 
-// Callbacks
-void (*GerenciadorMQTT::callbackStatusRemota)(int, String) = nullptr;
-void (*GerenciadorMQTT::callbackVidaRemota)(int, bool) = nullptr;
-void (*GerenciadorMQTT::callbackRespostaRemota)(int, String) = nullptr;
+// Construtor
+GerenciadorMQTT::GerenciadorMQTT() :
+    broker_iniciado(false),
+    conectado(false),
+    ultimo_pacote(0),
+    ultimo_reconectar(0),
+    pacotes_perdidos(0),
+    tentativas_reconexao(0),
+    clientes_conectados(0),
+    tempo_inicio_broker(0),
+    callbackStatusRemota(nullptr),
+    callbackVidaRemota(nullptr),
+    callbackRespostaRemota(nullptr),
+    callbackAlertaRacao(nullptr) {
+    instance = this;
+}
 
-bool GerenciadorMQTT::inicializar() {
-    DEBUG_MQTT_PRINTLN("=== Inicializando Gerenciador MQTT ===");
-    
-    // Configurar cliente WiFi SSL
-    wifiClient.setInsecure(); // Para HiveMQ Cloud (aceita certificado SSL)
-    DEBUG_MQTT_PRINTLN("✅ Cliente SSL configurado (insecure mode)");
-    
-    // Configurar cliente MQTT
-    mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
-    mqttClient.setCallback(onMensagemRecebida);
-    mqttClient.setKeepAlive(MQTT_KEEP_ALIVE);
-    
-    DEBUG_MQTT_PRINTF("📡 Server: %s:%d\n", MQTT_SERVER, MQTT_PORT);
-    DEBUG_MQTT_PRINTF("🆔 Client ID: %s\n", MQTT_CLIENT_ID);
-    DEBUG_MQTT_PRINTF("👤 Username: %s\n", MQTT_USERNAME);
-    DEBUG_MQTT_PRINTF("🔐 Password: %s\n", MQTT_PASSWORD);
-    DEBUG_MQTT_PRINTLN("🔒 SSL: Habilitado (WebSocket Secure)");
-    
-    return true;
+// Destrutor
+GerenciadorMQTT::~GerenciadorMQTT() {
+    pararBroker();
+    instance = nullptr;
+}
+
+// Métodos estáticos para inicializar e atualizar
+void GerenciadorMQTT::inicializar() {
+    if (!instance) {
+        instance = new GerenciadorMQTT();
+    }
+
+    // Aguardar WiFi conectar antes de inicializar MQTT
+    if (WiFi.status() != WL_CONNECTED) {
+        DEBUG_MQTT_PRINTLN("Aguardando WiFi conectar...");
+
+        int tentativas = 0;
+        while (WiFi.status() != WL_CONNECTED && tentativas < 40) {
+            delay(500);
+            tentativas++;
+        }
+
+        if (WiFi.status() != WL_CONNECTED) {
+            DEBUG_MQTT_PRINTLN("AVISO: WiFi não conectou - MQTT será iniciado depois");
+            return;  // Não inicializar ainda, será feito no loop
+        }
+
+        DEBUG_MQTT_PRINTLN("WiFi conectado! Iniciando MQTT...");
+    }
+
+    instance->init();
 }
 
 void GerenciadorMQTT::atualizar() {
-    unsigned long agora = millis();
-    
-    // Manter conexão MQTT ativa
-    if (conectado) {
-        mqttClient.loop();
-        
-        // Verificar se perdeu conexão
-        if (!mqttClient.connected()) {
-            conectado = false;
-            DEBUG_MQTT_PRINTLN("⚠️ Conexão MQTT perdida!");
-        }
+    if (!instance) {
+        return;
     }
-    
-    // Tentar reconectar se necessário
-    if (!conectado && (agora - ultimoReconectar > MQTT_RECONNECT_INTERVAL)) {
-        ultimoReconectar = agora;
-        DEBUG_MQTT_PRINTF("🔄 Tentativa de reconexão %d/%d\n", tentativasReconexao + 1, MQTT_MAX_RETRIES);
-        
-        if (reconectar()) {
-            conectado = true;
-            tentativasReconexao = 0;
-            DEBUG_MQTT_PRINTLN("✅ Reconexão bem-sucedida!");
-        } else {
-            tentativasReconexao++;
-            DEBUG_MQTT_PRINTF("❌ Tentativa %d falhou\n", tentativasReconexao);
-            
-            if (tentativasReconexao >= MQTT_MAX_RETRIES) {
-                DEBUG_MQTT_PRINTLN("🚫 Máximo de tentativas MQTT atingido - aguardando próximo ciclo");
-                tentativasReconexao = 0; // Reset para tentar novamente depois
-            }
-        }
+
+    // Se MQTT ainda não foi inicializado mas WiFi já conectou, inicializar agora
+    static bool tentouInicializar = false;
+    if (!instance->broker_iniciado && WiFi.status() == WL_CONNECTED && !tentouInicializar) {
+        DEBUG_MQTT_PRINTLN("WiFi conectou - tentando inicializar MQTT agora...");
+        tentouInicializar = true;
+        instance->init();
     }
-    
-    // Atualizar heartbeat
-    ultimoHeartbeat = agora;
+
+    instance->loop();
 }
 
+// Inicialização
+bool GerenciadorMQTT::init() {
+    DEBUG_MQTT_PRINTLN("=== Inicializando Gerenciador MQTT ===");
+
+    // 1. Iniciar broker MQTT local
+    if (!iniciarBroker()) {
+        DEBUG_MQTT_PRINTLN("ERRO: Falha ao iniciar broker MQTT!");
+        return false;
+    }
+
+    // 2. Aguardar broker estabilizar
+    DEBUG_MQTT_PRINTLN("Aguardando broker estabilizar...");
+    delay(1000);
+
+    // 3. Inscrever nos tópicos usando PicoMQTT
+    DEBUG_MQTT_PRINTLN("Inscrevendo em tópicos...");
+    inscreverTopicos();
+
+    // 4. Marcar como conectado
+    conectado = true;
+    DEBUG_MQTT_PRINTLN("Broker MQTT pronto!");
+
+    return true;
+}
+
+
+// Iniciar Broker MQTT Local
+bool GerenciadorMQTT::iniciarBroker() {
+    DEBUG_MQTT_PRINTLN("=== Iniciando Broker MQTT Local ===");
+
+    if (WiFi.status() != WL_CONNECTED) {
+        DEBUG_MQTT_PRINTLN("WiFi não conectado - impossível iniciar broker!");
+        return false;
+    }
+
+    if (!broker) {
+        // PicoMQTT: porta é definida no construtor
+        // Usar ServerLocalSubscribe para permitir subscriptions locais
+        broker = new PicoMQTT::ServerLocalSubscribe(MQTT_BROKER_PORT);
+    }
+
+    // Iniciar broker
+    broker->begin();
+
+    broker_iniciado = true;
+    tempo_inicio_broker = millis();
+
+    IPAddress ip = WiFi.localIP();
+    DEBUG_MQTT_PRINTLN("BROKER MQTT INICIADO COM SUCESSO!");
+    DEBUG_MQTT_PRINTF("   IP: %s\n", ip.toString().c_str());
+    DEBUG_MQTT_PRINTF("   Porta: %d\n", MQTT_BROKER_PORT);
+    DEBUG_MQTT_PRINTF("   Máximo de clientes: %d\n", MQTT_MAX_CLIENTS);
+    DEBUG_MQTT_PRINTLN("   Suporte a subscribe local: SIM");
+    DEBUG_MQTT_PRINTLN("===============================");
+
+    return true;
+}
+
+// Parar Broker MQTT
+void GerenciadorMQTT::pararBroker() {
+    if (broker && broker_iniciado) {
+        DEBUG_MQTT_PRINTLN("Parando broker MQTT...");
+        // uMQTTBroker não tem método stop, ele é gerenciado automaticamente
+        broker_iniciado = false;
+        DEBUG_MQTT_PRINTLN("Broker MQTT parado");
+    }
+}
+
+// Loop para atualizar broker
+void GerenciadorMQTT::loop() {
+    // Atualizar broker PicoMQTT
+    if (broker && broker_iniciado) {
+        broker->loop();
+    }
+
+    // Verificar timeout de remotas a cada ciclo
+    verificarTimeoutRemotas();
+}
+
+// Conectar ao MQTT (broker local)
 bool GerenciadorMQTT::conectar() {
     if (WiFi.status() != WL_CONNECTED) {
-        DEBUG_MQTT_PRINTLN("❌ WiFi não conectado - impossível conectar MQTT");
+        DEBUG_MQTT_PRINTLN("WiFi não conectado - impossível conectar MQTT");
         return false;
     }
-    
-    DEBUG_MQTT_PRINTLN("📶 WiFi conectado - iniciando conexão MQTT");
-    return reconectar();
-}
 
-bool GerenciadorMQTT::reconectar() {
-    DEBUG_MQTT_PRINT("🔄 Conectando ao MQTT...");
-    
-    if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
-        DEBUG_MQTT_PRINTLN(" ✅ Conectado!");
-        
-        // Debug detalhado dos tópicos configurados
-        DEBUG_MQTT_PRINTLN("🔍 === VERIFICAÇÃO DE TÓPICOS ===");
-        DEBUG_MQTT_PRINTLN("📋 Tópicos que a CENTRAL vai usar:");
-        DEBUG_MQTT_PRINTF("   📤 Comando para remotas: %s (com %%d para ID)\n", MQTT_TOPIC_COMANDO_REMOTA);
-        DEBUG_MQTT_PRINTF("   📤 Horário para remotas: %s (com %%d para ID)\n", MQTT_TOPIC_HORARIO_REMOTA);
-        DEBUG_MQTT_PRINTF("   📤 Tempo movimento: %s (com %%d para ID)\n", MQTT_TOPIC_TEMPO_MOVIMENTO);
-        DEBUG_MQTT_PRINTF("   📤 Status central: %s\n", MQTT_TOPIC_CENTRAL_STATUS);
-        DEBUG_MQTT_PRINTLN();
-        DEBUG_MQTT_PRINTLN("📋 Tópicos que a CENTRAL vai ESCUTAR:");
-        DEBUG_MQTT_PRINTF("   📥 Status das remotas: %s (com %%d para ID)\n", MQTT_TOPIC_STATUS_REMOTA);
-        DEBUG_MQTT_PRINTF("   📥 Vida específica: %s (com %%d para ID)\n", MQTT_TOPIC_VIDA_REMOTA);
-        DEBUG_MQTT_PRINTF("   📥 Vida geral: %s\n", MQTT_TOPIC_HEARTBEAT_GERAL);
-        DEBUG_MQTT_PRINTF("   📥 Respostas: %s (com %%d para ID)\n", MQTT_TOPIC_RESPOSTA_REMOTA);
-        DEBUG_MQTT_PRINTF("   📥 Comandos para central: %s\n", MQTT_TOPIC_CENTRAL_COMANDO);
-        DEBUG_MQTT_PRINTLN();
-        DEBUG_MQTT_PRINTLN("⚠️  COMPATIBILIDADE COM REMOTA:");
-        DEBUG_MQTT_PRINTLN("   Remota envia: alimentador/remota/comando");
-        DEBUG_MQTT_PRINTLN("   Central espera: alimentador/remota/%d/comando");
-        DEBUG_MQTT_PRINTLN("   Remota envia: alimentador/remota/status");
-        DEBUG_MQTT_PRINTLN("   Central espera: alimentador/remota/%d/status");
-        DEBUG_MQTT_PRINTLN("   Remota envia: alimentador/remota/heartbeat ✅");
-        DEBUG_MQTT_PRINTLN("   Central espera: alimentador/remota/heartbeat ✅");
-        DEBUG_MQTT_PRINTLN("   Remota envia: alimentador/remota/concluido");
-        DEBUG_MQTT_PRINTLN("   Central espera: alimentador/remota/%d/resposta");
-        DEBUG_MQTT_PRINTLN("🔍 ===========================");
-        
-        // Inscrever em todos os tópicos necessários
-        DEBUG_MQTT_PRINTLN("📥 Inscrevendo em tópicos...");
-        inscreverStatusRemotas();
-        inscreverVidaRemotas();
-        inscreverRespostasRemotas();
-        
-        // Publicar status da central
-        DEBUG_MQTT_PRINTLN("📤 Publicando status da central...");
-        publicarStatusCentral("ONLINE");
-        
-        conectado = true;
-        return true;
-    } else {
-        int estado = mqttClient.state();
-        DEBUG_MQTT_PRINTF(" ❌ Falhou (código %d - %s)\n", estado, obterDescricaoErroMQTT(estado).c_str());
-        conectado = false;
-        return false;
+    if (!broker_iniciado) {
+        DEBUG_MQTT_PRINTLN("Broker não iniciado - tentando iniciar...");
+        return iniciarBroker();
     }
+
+    conectado = broker_iniciado;
+    return conectado;
 }
 
+// Desconectar
 void GerenciadorMQTT::desconectar() {
     if (conectado) {
-        DEBUG_MQTT_PRINTLN("📴 Desconectando MQTT...");
-        publicarStatusCentral("OFFLINE");
-        mqttClient.disconnect();
+        DEBUG_MQTT_PRINTLN("Parando broker MQTT...");
+        pararBroker();
         conectado = false;
-        DEBUG_MQTT_PRINTLN("✅ MQTT desconectado");
+        DEBUG_MQTT_PRINTLN("Broker MQTT parado");
     }
 }
 
-bool GerenciadorMQTT::estaConectado() {
-    return conectado && mqttClient.connected();
+// Verificar se está conectado
+bool GerenciadorMQTT::estaConectado() const {
+    return conectado && broker_iniciado && (WiFi.status() == WL_CONNECTED);
 }
 
-bool GerenciadorMQTT::enviarComandoRemota(int idRemota, String acao, int tempo) {
+// Enviar comando para remota específica
+bool GerenciadorMQTT::enviarComandoRemota(int idRemota, const String& acao, int tempo) {
     if (!estaConectado()) {
-        DEBUG_MQTT_PRINTLN("❌ MQTT não conectado - comando não enviado");
+        DEBUG_MQTT_PRINTLN("Broker não conectado - comando não enviado");
         return false;
     }
-    
+
     String topico = construirTopico(MQTT_TOPIC_COMANDO_REMOTA, idRemota);
-    
+
     // Criar JSON do comando
     StaticJsonDocument<200> doc;
     doc["acao"] = acao;
     doc["timestamp"] = millis();
-    
+
     if (tempo > 0) {
         doc["tempo"] = tempo;
     }
-    
+
     String payload;
     serializeJson(doc, payload);
-    
-    DEBUG_MQTT_PRINTF("📤 Enviando comando para Remota %d...\n", idRemota);
+
+    DEBUG_MQTT_PRINTF("Enviando comando para Remota %d...\n", idRemota);
     DEBUG_MQTT_PRINTF("   Tópico: %s\n", topico.c_str());
     DEBUG_MQTT_PRINTF("   Payload: %s\n", payload.c_str());
-    
-    bool resultado = mqttClient.publish(topico.c_str(), payload.c_str());
-    
-    if (resultado) {
-        DEBUG_MQTT_PRINTF("✅ Comando enviado com sucesso para Remota %d\n", idRemota);
-    } else {
-        DEBUG_MQTT_PRINTF("❌ Falha ao enviar comando para Remota %d\n", idRemota);
-    }
-    
-    return resultado;
+
+    // Publicar usando PicoMQTT
+    broker->publish(topico, payload);
+
+    DEBUG_MQTT_PRINTF("Comando enviado com sucesso para Remota %d\n", idRemota);
+    ultimo_pacote = millis();
+
+    return true;
 }
 
-bool GerenciadorMQTT::enviarComandoGeral(String acao, int tempo, int idRemota) {
+// Enviar comando geral
+bool GerenciadorMQTT::enviarComandoGeral(const String& acao, int tempo, int idRemota) {
     if (!estaConectado()) {
-        DEBUG_MQTT_PRINTLN("❌ MQTT não conectado - comando geral não enviado");
+        DEBUG_MQTT_PRINTLN("MQTT não conectado - comando geral não enviado");
         return false;
     }
-    
+
     // Criar JSON do comando com ID da remota incluído
     StaticJsonDocument<200> doc;
     doc["acao"] = acao;
     doc["remota_id"] = idRemota;
     doc["timestamp"] = millis();
-    
+
     if (tempo > 0) {
         doc["tempo"] = tempo;
     }
-    
+
     String payload;
     serializeJson(doc, payload);
-    
-    DEBUG_MQTT_PRINTF("📤 Enviando comando GERAL para Remota %d...\n", idRemota);
-    DEBUG_MQTT_PRINTF("   Tópico: %s\n", MQTT_TOPIC_COMANDO_GERAL);
-    DEBUG_MQTT_PRINTF("   Payload: %s\n", payload.c_str());
-    
-    bool resultado = mqttClient.publish(MQTT_TOPIC_COMANDO_GERAL, payload.c_str());
-    
-    if (resultado) {
-        DEBUG_MQTT_PRINTF("✅ Comando geral enviado com sucesso para Remota %d\n", idRemota);
-    } else {
-        DEBUG_MQTT_PRINTF("❌ Falha ao enviar comando geral para Remota %d\n", idRemota);
-    }
-    
-    return resultado;
+
+    DEBUG_MQTT_PRINTF("Enviando comando GERAL para Remota %d...\n", idRemota);
+    DEBUG_MQTT_PRINTF("  Tópico: %s\n", MQTT_TOPIC_COMANDO_GERAL);
+    DEBUG_MQTT_PRINTF("  Payload: %s\n", payload.c_str());
+
+    broker->publish(MQTT_TOPIC_COMANDO_GERAL, payload);
+
+    DEBUG_MQTT_PRINTF("Comando geral enviado com sucesso para Remota %d\n", idRemota);
+    ultimo_pacote = millis();
+
+    return true;
 }
 
+// Configurar horário da remota
 bool GerenciadorMQTT::configurarHorarioRemota(int idRemota, int hora, int minuto, int quantidade) {
     if (!estaConectado()) {
-        DEBUG_MQTT_PRINTLN("❌ MQTT não conectado - configuração de horário não enviada");
+        DEBUG_MQTT_PRINTLN("MQTT não conectado - configuração de horário não enviada");
         return false;
     }
-    
+
     String topico = construirTopico(MQTT_TOPIC_HORARIO_REMOTA, idRemota);
-    
+
     // Criar JSON da configuração
     StaticJsonDocument<200> doc;
     doc["hora"] = hora;
     doc["minuto"] = minuto;
     doc["quantidade"] = quantidade;
     doc["timestamp"] = millis();
-    
+
     String payload;
     serializeJson(doc, payload);
-    
-    DEBUG_MQTT_PRINTF("⏰ Configurando horário para Remota %d...\n", idRemota);
-    DEBUG_MQTT_PRINTF("   Tópico: %s\n", topico.c_str());
-    DEBUG_MQTT_PRINTF("   Payload: %s\n", payload.c_str());
-    
-    bool resultado = mqttClient.publish(topico.c_str(), payload.c_str());
-    
-    if (resultado) {
-        DEBUG_MQTT_PRINTF("✅ Horário configurado: Remota %d às %02d:%02d (%dg)\n", 
-                          idRemota, hora, minuto, quantidade);
-    } else {
-        DEBUG_MQTT_PRINTF("❌ Falha ao configurar horário para Remota %d\n", idRemota);
-    }
-    
-    return resultado;
+
+    DEBUG_MQTT_PRINTF("Configurando horário para Remota %d...\n", idRemota);
+    DEBUG_MQTT_PRINTF("  Tópico: %s\n", topico.c_str());
+    DEBUG_MQTT_PRINTF("  Payload: %s\n", payload.c_str());
+
+    broker->publish(topico, payload);
+
+    DEBUG_MQTT_PRINTF("Horário configurado: Remota %d às %02d:%02d (%dg)\n",
+                      idRemota, hora, minuto, quantidade);
+    ultimo_pacote = millis();
+
+    return true;
 }
 
+// Configurar tempo de movimento
 bool GerenciadorMQTT::configurarTempoMovimento(int idRemota, int tempo) {
     if (!estaConectado()) {
         return false;
     }
-    
+
     String topico = construirTopico(MQTT_TOPIC_TEMPO_MOVIMENTO, idRemota);
-    
+
     // Criar JSON do tempo
     StaticJsonDocument<100> doc;
     doc["tempo_movimento"] = tempo;
     doc["timestamp"] = millis();
-    
+
     String payload;
     serializeJson(doc, payload);
-    
-    bool resultado = mqttClient.publish(topico.c_str(), payload.c_str());
-    
-    if (resultado) {
-        Serial.printf("📤 Tempo configurado para Remota %d: %d segundos\n", idRemota, tempo);
-    }
-    
-    return resultado;
+
+    broker->publish(topico, payload);
+
+    DEBUG_MQTT_PRINTF("Tempo configurado para Remota %d: %d segundos\n", idRemota, tempo);
+    ultimo_pacote = millis();
+
+    return true;
 }
 
+// Solicitar status da remota
 bool GerenciadorMQTT::solicitarStatusRemota(int idRemota) {
     return enviarComandoRemota(idRemota, MQTT_CMD_STATUS);
 }
 
-bool GerenciadorMQTT::enviarPingRemota(int idRemota) {
-    return enviarComandoRemota(idRemota, MQTT_CMD_HEARTBEAT);
-}
+// Inscrever em tópicos
+bool GerenciadorMQTT::inscreverTopicos() {
+    DEBUG_MQTT_PRINTLN("=== INSCREVENDO EM TÓPICOS ===");
 
-bool GerenciadorMQTT::inscreverStatusRemotas() {
-    // Inscrever no tópico específico por remota (padrão atual)
+    // Status das remotas
     String topico1 = "alimentador/remota/+/status";
-    bool resultado1 = mqttClient.subscribe(topico1.c_str());
-    
-    if (resultado1) {
-        DEBUG_MQTT_PRINTF("📥 Inscrito em: %s\n", topico1.c_str());
-    } else {
-        DEBUG_MQTT_PRINTF("❌ Falha ao inscrever em: %s\n", topico1.c_str());
-    }
-    
-    // Inscrever no tópico geral de status (para compatibilidade com remota)
+    broker->subscribe(topico1, [this](char* topic, char* payload) {
+        processarMensagem(String(topic), String(payload));
+    });
+    DEBUG_MQTT_PRINTF("Inscrito em: %s - OK\n", topico1.c_str());
+
+    // Status geral (compatibilidade)
     String topico2 = "alimentador/remota/status";
-    bool resultado2 = mqttClient.subscribe(topico2.c_str());
-    
-    if (resultado2) {
-        DEBUG_MQTT_PRINTF("📥 Inscrito em: %s (compatibilidade)\n", topico2.c_str());
-    } else {
-        DEBUG_MQTT_PRINTF("❌ Falha ao inscrever em: %s\n", topico2.c_str());
-    }
-    
-    return resultado1 && resultado2;
+    broker->subscribe(topico2, [this](char* topic, char* payload) {
+        processarMensagem(String(topic), String(payload));
+    });
+    DEBUG_MQTT_PRINTF("Inscrito em: %s - OK\n", topico2.c_str());
+
+    // Vida das remotas
+    String topico3 = "alimentador/remota/+/vida";
+    broker->subscribe(topico3, [this](char* topic, char* payload) {
+        processarMensagem(String(topic), String(payload));
+    });
+    DEBUG_MQTT_PRINTF("Inscrito em: %s - OK\n", topico3.c_str());
+
+    // Heartbeat geral
+    String topico4 = MQTT_TOPIC_HEARTBEAT_GERAL;
+    broker->subscribe(topico4, [this](char* topic, char* payload) {
+        processarMensagem(String(topic), String(payload));
+    });
+    DEBUG_MQTT_PRINTF("Inscrito em: %s - OK\n", topico4.c_str());
+
+    // Respostas das remotas
+    String topico5 = "alimentador/remota/+/resposta";
+    broker->subscribe(topico5, [this](char* topic, char* payload) {
+        processarMensagem(String(topic), String(payload));
+    });
+    DEBUG_MQTT_PRINTF("Inscrito em: %s - OK\n", topico5.c_str());
+
+    // Respostas gerais (compatibilidade)
+    String topico6 = "alimentador/remota/concluido";
+    broker->subscribe(topico6, [this](char* topic, char* payload) {
+        processarMensagem(String(topic), String(payload));
+    });
+    DEBUG_MQTT_PRINTF("Inscrito em: %s - OK\n", topico6.c_str());
+
+    // Alertas de ração
+    String topico7 = MQTT_TOPIC_ALERTA_RACAO;
+    broker->subscribe(topico7, [this](char* topic, char* payload) {
+        processarMensagem(String(topic), String(payload));
+    });
+    DEBUG_MQTT_PRINTF("Inscrito em: %s - OK\n", topico7.c_str());
+
+    DEBUG_MQTT_PRINTLN("===============================");
+
+    return true;
 }
 
-bool GerenciadorMQTT::inscreverVidaRemotas() {
-    // Inscrever no tópico específico por remota
-    String topico1 = "alimentador/remota/+/vida";
-    bool resultado1 = mqttClient.subscribe(topico1.c_str());
-    
-    if (resultado1) {
-        DEBUG_MQTT_PRINTF("📥 Inscrito em: %s\n", topico1.c_str());
-    } else {
-        DEBUG_MQTT_PRINTF("❌ Falha ao inscrever em: %s\n", topico1.c_str());
-    }
-    
-    // Inscrever no tópico geral de heartbeat
-    String topico2 = MQTT_TOPIC_HEARTBEAT_GERAL;
-    bool resultado2 = mqttClient.subscribe(topico2.c_str());
-    
-    if (resultado2) {
-        DEBUG_MQTT_PRINTF("📥 Inscrito em: %s\n", topico2.c_str());
-    } else {
-        DEBUG_MQTT_PRINTF("❌ Falha ao inscrever em: %s\n", topico2.c_str());
-    }
-    
-    return resultado1 && resultado2;
-}
-
-bool GerenciadorMQTT::inscreverRespostasRemotas() {
-    // Inscrever no tópico específico por remota (padrão atual)
-    String topico1 = "alimentador/remota/+/resposta";
-    bool resultado1 = mqttClient.subscribe(topico1.c_str());
-    
-    if (resultado1) {
-        DEBUG_MQTT_PRINTF("📥 Inscrito em: %s\n", topico1.c_str());
-    } else {
-        DEBUG_MQTT_PRINTF("❌ Falha ao inscrever em: %s\n", topico1.c_str());
-    }
-    
-    // Inscrever no tópico geral de concluído (para compatibilidade com remota)
-    String topico2 = "alimentador/remota/concluido";
-    bool resultado2 = mqttClient.subscribe(topico2.c_str());
-    
-    if (resultado2) {
-        DEBUG_MQTT_PRINTF("📥 Inscrito em: %s (compatibilidade)\n", topico2.c_str());
-    } else {
-        DEBUG_MQTT_PRINTF("❌ Falha ao inscrever em: %s\n", topico2.c_str());
-    }
-    
-    return resultado1 && resultado2;
-}
-
+// Publicar status da central
 bool GerenciadorMQTT::publicarStatusCentral(String status) {
     if (!estaConectado()) {
         return false;
     }
-    
+
     StaticJsonDocument<200> doc;
     doc["status"] = status;
     doc["timestamp"] = millis();
     doc["remotas_configuradas"] = MAX_REMOTAS;
-    
+
     String payload;
     serializeJson(doc, payload);
-    
-    return mqttClient.publish(MQTT_TOPIC_CENTRAL_STATUS, payload.c_str());
+
+    broker->publish(MQTT_TOPIC_CENTRAL_STATUS, payload);
+
+    return true;
 }
 
-void GerenciadorMQTT::onMensagemRecebida(char* topico, byte* payload, unsigned int comprimento) {
-    // Converter payload para string
-    String mensagem;
-    for (unsigned int i = 0; i < comprimento; i++) {
-        mensagem += (char)payload[i];
+
+// Processar mensagem recebida
+void GerenciadorMQTT::processarMensagem(const String& topico, const String& payload) {
+    int idRemota = extrairIdRemotaDoTopico(topico);
+    
+    // Debug apenas para tópicos relevantes
+    if (topico.indexOf("/remota") >= 0) {
+        DEBUG_MQTT_PRINTLN();
+        DEBUG_MQTT_PRINTLN("=== MENSAGEM MQTT RECEBIDA ===");
+        DEBUG_MQTT_PRINTF("   Tópico: %s\n", topico.c_str());
+        DEBUG_MQTT_PRINTF("   Payload: %s\n", payload.c_str());
+        DEBUG_MQTT_PRINTF("   ID Remota: %d\n", idRemota);
+        DEBUG_MQTT_PRINTLN("===============================");
     }
-    
-    String topicoStr = String(topico);
-    int idRemota = extrairIdRemotaDoTopico(topicoStr);
-    
-    DEBUG_MQTT_PRINTLN();
-    DEBUG_MQTT_PRINTLN("📥 === MENSAGEM MQTT RECEBIDA ===");
-    DEBUG_MQTT_PRINTF("   Tópico: %s\n", topico);
-    DEBUG_MQTT_PRINTF("   Payload: %s\n", mensagem.c_str());
-    DEBUG_MQTT_PRINTF("   Tamanho: %d bytes\n", comprimento);
-    DEBUG_MQTT_PRINTF("   ID da Remota extraído: %d\n", idRemota);
     
     // Processar baseado no tipo de tópico
-    if (topicoStr.indexOf("/status") > 0) {
-        DEBUG_MQTT_PRINTF("   Processando como STATUS da Remota %d\n", idRemota);
-        processarMensagemStatus(idRemota, mensagem);
-    } else if (topicoStr.indexOf("/vida") > 0) {
-        DEBUG_MQTT_PRINTF("   Processando como HEARTBEAT da Remota %d\n", idRemota);
-        processarMensagemVida(idRemota, mensagem);
-    } else if (topicoStr.indexOf("/resposta") > 0) {
-        DEBUG_MQTT_PRINTF("   Processando como RESPOSTA da Remota %d\n", idRemota);
-        processarMensagemResposta(idRemota, mensagem);
-    } else if (topicoStr == MQTT_TOPIC_HEARTBEAT_GERAL) {
-        DEBUG_MQTT_PRINTLN("   Processando HEARTBEAT GERAL");
-        processarHeartbeatGeral(mensagem);
-    } else {
-        DEBUG_MQTT_PRINTF("   ⚠️ Tipo de tópico não reconhecido: %s\n", topicoStr.c_str());
+    if (topico.indexOf("/status") > 0) {
+        processarMensagemStatus(idRemota, payload);
+    } else if (topico.indexOf("/vida") > 0) {
+        processarMensagemVida(idRemota, payload);
+    } else if (topico.indexOf("/resposta") > 0) {
+        processarMensagemResposta(idRemota, payload);
+    } else if (topico == MQTT_TOPIC_HEARTBEAT_GERAL) {
+        processarHeartbeatGeral(payload);
+    } else if (topico == MQTT_TOPIC_ALERTA_RACAO) {
+        processarAlertaRacao(payload);
     }
-    
-    DEBUG_MQTT_PRINTLN("📥 ==============================");
-    DEBUG_MQTT_PRINTLN();
 }
 
+// Processar mensagem de status
 void GerenciadorMQTT::processarMensagemStatus(int idRemota, String payload) {
-    DEBUG_MQTT_PRINTF("🔍 Processando status da Remota %d: %s\n", idRemota, payload.c_str());
-    
     StaticJsonDocument<300> doc;
     DeserializationError erro = deserializeJson(doc, payload);
     
-    if (erro) {
-        DEBUG_MQTT_PRINTF("❌ Erro ao processar JSON de status: %s\n", erro.c_str());
-        return;
+    String status = "UNKNOWN";
+    if (!erro) {
+        status = doc["status"] | "UNKNOWN";
+    } else {
+        // Se não é JSON, usar payload como status
+        status = payload;
     }
     
-    String status = doc["status"] | "UNKNOWN";
-    DEBUG_MQTT_PRINTF("📊 Status extraído: %s\n", status.c_str());
+    DEBUG_MQTT_PRINTF("Status Remota %d: %s\n", idRemota, status.c_str());
     
     if (callbackStatusRemota) {
-        DEBUG_MQTT_PRINTF("📞 Chamando callback de status para Remota %d\n", idRemota);
         callbackStatusRemota(idRemota, status);
-    } else {
-        DEBUG_MQTT_PRINTLN("⚠️ Callback de status não definido");
     }
 }
 
+// Processar mensagem de vida/heartbeat
 void GerenciadorMQTT::processarMensagemVida(int idRemota, String payload) {
-    DEBUG_MQTT_PRINTF("💓 Processando heartbeat da Remota %d: %s\n", idRemota, payload.c_str());
-    
     StaticJsonDocument<200> doc;
     DeserializationError erro = deserializeJson(doc, payload);
     
-    if (erro) {
-        DEBUG_MQTT_PRINTF("❌ Erro ao processar JSON de vida: %s\n", erro.c_str());
-        return;
+    String status = "UNKNOWN";
+    if (!erro) {
+        status = doc["status"] | "UNKNOWN";
+    } else {
+        status = payload;
     }
     
-    String status = doc["status"] | "UNKNOWN";
-    bool viva = (status == "ALIVE");
-    DEBUG_MQTT_PRINTF("💗 Remota %d está %s\n", idRemota, viva ? "VIVA" : "PERDIDA");
+    DEBUG_MQTT_PRINTF("Heartbeat Remota %d: %s\n", idRemota, status.c_str());
     
     if (callbackVidaRemota) {
-        DEBUG_MQTT_PRINTF("📞 Chamando callback de vida para Remota %d\n", idRemota);
-        callbackVidaRemota(idRemota, viva);
-    } else {
-        DEBUG_MQTT_PRINTLN("⚠️ Callback de vida não definido");
+        callbackVidaRemota(idRemota, status);
     }
 }
 
+// Processar mensagem de resposta
 void GerenciadorMQTT::processarMensagemResposta(int idRemota, String payload) {
-    DEBUG_MQTT_PRINTF("💬 Processando resposta da Remota %d: %s\n", idRemota, payload.c_str());
-    
     StaticJsonDocument<300> doc;
     DeserializationError erro = deserializeJson(doc, payload);
     
-    if (erro) {
-        DEBUG_MQTT_PRINTF("⚠️ Payload não é JSON válido, usando como string: %s\n", payload.c_str());
-        if (callbackRespostaRemota) {
-            callbackRespostaRemota(idRemota, payload);
-        }
-        return;
+    String resultado = payload;
+    if (!erro) {
+        resultado = doc["resultado"] | payload;
     }
     
-    String resultado = doc["resultado"] | payload;
-    DEBUG_MQTT_PRINTF("📋 Resultado extraído: %s\n", resultado.c_str());
+    DEBUG_MQTT_PRINTF("Resposta Remota %d: %s\n", idRemota, resultado.c_str());
     
     if (callbackRespostaRemota) {
-        DEBUG_MQTT_PRINTF("📞 Chamando callback de resposta para Remota %d\n", idRemota);
         callbackRespostaRemota(idRemota, resultado);
-    } else {
-        DEBUG_MQTT_PRINTLN("⚠️ Callback de resposta não definido");
     }
 }
 
+// Processar heartbeat geral
 void GerenciadorMQTT::processarHeartbeatGeral(String payload) {
-    DEBUG_MQTT_PRINTF("💓 Processando heartbeat geral: %s\n", payload.c_str());
-    
+    StaticJsonDocument<300> doc;
+    DeserializationError erro = deserializeJson(doc, payload);
+
+    int idRemota = 1; // Default
+    String status = "UNKNOWN";
+    int rssi = 0;
+    unsigned long uptime = 0;
+
+    if (!erro) {
+        idRemota = doc["remota_id"] | 1;
+        status = doc["status"] | "UNKNOWN";
+        rssi = doc["wifi_rssi"] | 0;
+        uptime = doc["uptime"] | 0;
+    } else {
+        status = payload;
+    }
+
+    DEBUG_MQTT_PRINTF("Heartbeat Geral Remota %d: %s\n", idRemota, status.c_str());
+
+    // Atualizar status da remota
+    if (status == "ALIVE") {
+        atualizarStatusRemota(idRemota, rssi, uptime);
+    }
+
+    if (callbackVidaRemota) {
+        callbackVidaRemota(idRemota, status);
+    }
+}
+
+// Processar alerta de ração
+void GerenciadorMQTT::processarAlertaRacao(String payload) {
     StaticJsonDocument<300> doc;
     DeserializationError erro = deserializeJson(doc, payload);
     
-    if (erro) {
-        DEBUG_MQTT_PRINTF("⚠️ Heartbeat não é JSON válido: %s\n", payload.c_str());
-        return;
+    int idRemota = 1; // Default
+    String nivelRacao = "DESCONHECIDO";
+    
+    if (!erro) {
+        idRemota = doc["remota_id"] | 1;
+        nivelRacao = doc["nivel"] | doc["status"] | payload;
+    } else {
+        nivelRacao = payload;
+        // Tentar extrair ID da remota do texto
+        if (payload.indexOf("Remota") >= 0) {
+            int inicio = payload.indexOf("Remota") + 6;
+            String numeroStr = payload.substring(inicio, inicio + 2);
+            idRemota = numeroStr.toInt();
+            if (idRemota == 0) idRemota = 1;
+        }
     }
     
-    // Extrair informações do heartbeat
-    String status = doc["status"] | "UNKNOWN";
+    DEBUG_MQTT_PRINTF("Alerta Ração Remota %d: %s\n", idRemota, nivelRacao.c_str());
     
-    // Assumir que é da Remota 1 se não especificado
-    // Você pode melhorar isso adicionando um campo "remota_id" no JSON
-    int idRemota = doc["remota_id"] | 1; // Default para Remota 1
-    
-    bool viva = (status == "DISPONIVEL" || status == "ONLINE" || status == "ALIVE");
-    
-    DEBUG_MQTT_PRINTF("💓 Heartbeat: Remota %d está %s\n", idRemota, viva ? "VIVA" : "MORTA");
-    
-    if (callbackVidaRemota) {
-        DEBUG_MQTT_PRINTF("📞 Chamando callback de vida para Remota %d\n", idRemota);
-        callbackVidaRemota(idRemota, viva);
-    } else {
-        DEBUG_MQTT_PRINTLN("⚠️ Callback de vida não definido");
+    if (callbackAlertaRacao) {
+        callbackAlertaRacao(idRemota, nivelRacao);
     }
 }
 
+// Extrair ID da remota do tópico
 int GerenciadorMQTT::extrairIdRemotaDoTopico(String topico) {
     // Formato: alimentador/remota/X/status (onde X é o ID)
     int inicio = topico.indexOf("/remota/") + 8;
@@ -519,37 +540,45 @@ int GerenciadorMQTT::extrairIdRemotaDoTopico(String topico) {
         return idStr.toInt();
     }
     
-    return 0; // ID inválido
+    return 1; // Default para Remota 1 se não conseguir extrair
 }
 
+// Construir tópico com ID da remota
 String GerenciadorMQTT::construirTopico(const char* template_topico, int idRemota) {
     char buffer[100];
     snprintf(buffer, sizeof(buffer), template_topico, idRemota);
     return String(buffer);
 }
 
-void GerenciadorMQTT::definirCallbackStatusRemota(void (*callback)(int, String)) {
+// Definir callbacks
+void GerenciadorMQTT::definirCallbackStatusRemota(void (*callback)(int, const String&)) {
     callbackStatusRemota = callback;
 }
 
-void GerenciadorMQTT::definirCallbackVidaRemota(void (*callback)(int, bool)) {
+void GerenciadorMQTT::definirCallbackVidaRemota(void (*callback)(int, const String&)) {
     callbackVidaRemota = callback;
 }
 
-void GerenciadorMQTT::definirCallbackRespostaRemota(void (*callback)(int, String)) {
+void GerenciadorMQTT::definirCallbackRespostaRemota(void (*callback)(int, const String&)) {
     callbackRespostaRemota = callback;
 }
 
-String GerenciadorMQTT::obterStatusConexao() {
-    if (conectado && mqttClient.connected()) {
+void GerenciadorMQTT::definirCallbackAlertaRacao(void (*callback)(int, const String&)) {
+    callbackAlertaRacao = callback;
+}
+
+// Obter status da conexão
+String GerenciadorMQTT::obterStatusConexao() const {
+    if (conectado && broker_iniciado) {
         return "Conectado";
-    } else if (tentativasReconexao > 0) {
+    } else if (tentativas_reconexao > 0) {
         return "Reconectando...";
     } else {
         return "Desconectado";
     }
 }
 
+// Obter descrição do erro MQTT
 String GerenciadorMQTT::obterDescricaoErroMQTT(int codigo) {
     switch (codigo) {
         case -4: return "MQTT_CONNECTION_TIMEOUT - Timeout na conexão";
@@ -566,10 +595,78 @@ String GerenciadorMQTT::obterDescricaoErroMQTT(int codigo) {
     }
 }
 
-unsigned long GerenciadorMQTT::obterUltimoHeartbeat() {
-    return ultimoHeartbeat;
+// Getters
+unsigned long GerenciadorMQTT::getUltimoPacote() const {
+    return ultimo_pacote;
 }
 
-void GerenciadorMQTT::resetarTentativasReconexao() {
-    tentativasReconexao = 0;
+int GerenciadorMQTT::getPacotesPerdidos() const {
+    return pacotes_perdidos;
+}
+
+// Reset de tentativas
+void GerenciadorMQTT::resetarTentativas() {
+    tentativas_reconexao = 0;
+}
+
+// Novos getters para broker
+int GerenciadorMQTT::getClientesConectados() const {
+    // Contar remotas que estão conectadas
+    int count = 0;
+    for (const auto& par : remotas_ativas) {
+        if (par.second.conectada) {
+            count++;
+        }
+    }
+    return count;
+}
+
+bool GerenciadorMQTT::brokerEstaRodando() const {
+    return broker_iniciado;
+}
+
+String GerenciadorMQTT::getIPBroker() const {
+    if (WiFi.status() == WL_CONNECTED) {
+        return WiFi.localIP().toString();
+    }
+    return "0.0.0.0";
+}
+
+// Verificar se remota está conectada
+bool GerenciadorMQTT::remotaEstaConectada(int idRemota) const {
+    auto it = remotas_ativas.find(idRemota);
+    if (it != remotas_ativas.end()) {
+        return it->second.conectada;
+    }
+    return false;
+}
+
+// Atualizar status da remota
+void GerenciadorMQTT::atualizarStatusRemota(int idRemota, int rssi, unsigned long uptime) {
+    InfoRemota& info = remotas_ativas[idRemota];
+    info.conectada = true;
+    info.ultimo_heartbeat = millis();
+    info.rssi = rssi;
+    info.uptime = uptime;
+
+    DEBUG_MQTT_PRINTF("✓ Remota %d atualizada: RSSI=%d dBm, Uptime=%lu s\n",
+                      idRemota, rssi, uptime / 1000);
+}
+
+// Verificar timeout de remotas
+void GerenciadorMQTT::verificarTimeoutRemotas() {
+    unsigned long agora = millis();
+
+    for (auto& par : remotas_ativas) {
+        int idRemota = par.first;
+        InfoRemota& info = par.second;
+
+        if (info.conectada) {
+            // Verificar se passou do timeout
+            if (agora - info.ultimo_heartbeat > TIMEOUT_REMOTA) {
+                info.conectada = false;
+                DEBUG_MQTT_PRINTF("✗ Remota %d desconectada (timeout)\n", idRemota);
+            }
+        }
+    }
 }

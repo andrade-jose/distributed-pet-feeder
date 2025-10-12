@@ -16,7 +16,7 @@ void Botoes::inicializar() {
     pinMode(DOWN_BUTTON_PIN, INPUT_PULLUP);
     pinMode(ENTER_BUTTON_PIN, INPUT_PULLUP);
     
-    Serial.println("Botões inicializados");
+        Serial.println("Botões inicializados");
     Serial.printf("Pino CIMA: %d\n", UP_BUTTON_PIN);
     Serial.printf("Pino BAIXO: %d\n", DOWN_BUTTON_PIN);
     Serial.printf("Pino ENTER: %d\n", ENTER_BUTTON_PIN);
@@ -24,18 +24,18 @@ void Botoes::inicializar() {
 
 bool Botoes::estaPressionado(int pino) {
     unsigned long agora = millis();
-    
+
     // Verificar debounce
     if (agora - ultimoPressionamento < delayDebounce) {
         return false;
     }
-    
+
     // Ler estado do botão (LOW = pressionado devido ao pull-up)
     if (digitalRead(pino) == LOW) {
         ultimoPressionamento = agora;
         return true;
     }
-    
+
     return false;
 }
 
@@ -43,11 +43,11 @@ void Botoes::verificarTodos() {
     if (estaPressionado(UP_BUTTON_PIN)) {
         Serial.println("Botão CIMA pressionado");
     }
-    
+
     if (estaPressionado(DOWN_BUTTON_PIN)) {
         Serial.println("Botão BAIXO pressionado");
     }
-    
+
     if (estaPressionado(ENTER_BUTTON_PIN)) {
         Serial.println("Botão ENTER pressionado");
     }

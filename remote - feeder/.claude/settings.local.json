@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Read(//c/Users/ALEXANDRE/Desktop/Projeto Alimentador/distributed-pet-feeder/central-feeder/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

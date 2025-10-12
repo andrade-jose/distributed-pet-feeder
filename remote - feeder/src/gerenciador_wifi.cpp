@@ -1,55 +1,53 @@
-#include "WiFiManager.h"
+#include "gerenciador_wifi.h"
 
-WiFiManager::WiFiManager(const char* ssid, const char* password) {
-    this->ssid = ssid;
-    this->password = password;
-    this->conectado = false;
-    this->ultimaTentativa = 0;
+WiFiManager::WiFiManager(const char* ssidParam, const char* passwordParam) 
+    : ssid(ssidParam), password(passwordParam), conectado(false), ultimaTentativa(0) {
 }
 
 void WiFiManager::iniciar() {
     WiFi.mode(WIFI_STA);
-    Serial.println("📡 WiFiManager inicializado");
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(true);
+    
+    Serial.println("📡 WiFi Manager iniciado");
 }
 
 bool WiFiManager::conectar() {
-    Serial.println("📡 Conectando ao WiFi...");
-    Serial.printf("   SSID: %s\n", ssid);
+    if (estaConectado()) {
+        return true;
+    }
     
+    Serial.printf("🔗 Conectando ao WiFi: %s\n", ssid);
     WiFi.begin(ssid, password);
     
-    int tentativas = 0;
-    while (WiFi.status() != WL_CONNECTED && tentativas < 20) {
+    unsigned long inicio = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - inicio) < 15000) {
         delay(500);
         Serial.print(".");
-        tentativas++;
     }
     
     if (WiFi.status() == WL_CONNECTED) {
         conectado = true;
-        Serial.println("");
-        Serial.printf("✅ WiFi conectado!\n");
-        Serial.printf("   IP: %s\n", WiFi.localIP().toString().c_str());
-        Serial.printf("   RSSI: %d dBm\n", WiFi.RSSI());
+        Serial.printf("\n✅ WiFi conectado! IP: %s\n", WiFi.localIP().toString().c_str());
+        Serial.printf("📶 RSSI: %d dBm\n", WiFi.RSSI());
         return true;
     } else {
         conectado = false;
-        Serial.println("");
-        Serial.println("❌ Falha ao conectar WiFi!");
+        Serial.println("\n❌ Falha na conexão WiFi");
         return false;
     }
 }
 
 void WiFiManager::verificarConexao() {
-    unsigned long agora = millis();
-    
     if (WiFi.status() != WL_CONNECTED) {
         conectado = false;
         
+        // Tentar reconectar a cada INTERVALO_RECONEXAO
+        unsigned long agora = millis();
         if (agora - ultimaTentativa >= INTERVALO_RECONEXAO) {
-            Serial.println("🔄 WiFi desconectado. Tentando reconectar...");
-            conectar();
             ultimaTentativa = agora;
+            Serial.println("🔄 Tentando reconectar WiFi...");
+            conectar();
         }
     } else {
         conectado = true;
@@ -57,14 +55,15 @@ void WiFiManager::verificarConexao() {
 }
 
 bool WiFiManager::estaConectado() {
-    return conectado && (WiFi.status() == WL_CONNECTED);
+    return (WiFi.status() == WL_CONNECTED);
 }
 
 String WiFiManager::obterIP() {
-    if (estaConectado()) {
-        return WiFi.localIP().toString();
-    }
-    return "0.0.0.0";
+    return WiFi.localIP().toString();
+}
+
+int WiFiManager::obterRSSI() {
+    return WiFi.RSSI();
 }
 
 void WiFiManager::desconectar() {

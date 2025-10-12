@@ -2,27 +2,56 @@
 #define CONFIG_H
 
 // ===== CONFIGURAÇÃO WIFI =====
-const char* WIFI_SSID = "Coelhoandrade";        // Altere para o nome da sua rede WiFi
-const char* WIFI_PASSWORD = "190520jg";         // Altere para a senha da sua rede WiFi
+#define DEFAULT_WIFI_SSID "Coelhoandrade"
+#define DEFAULT_WIFI_PASSWORD "190520jg"
+
+// ===== CONFIGURAÇÃO DA REMOTA =====
+extern const int REMOTA_ID;
 
 // ===== CONFIGURAÇÃO MQTT =====
-// HiveMQ Cloud - SSL/TLS obrigatório na porta 8883
-const char* MQTT_SERVER = "9aa85a8cfb4a4ba896f2289aa408ba5a.s1.eu.hivemq.cloud";  // URL do seu cluster HiveMQ
-const int MQTT_PORT = 8883;                     // Porta SSL/TLS (8883) - VOLTANDO PARA SSL TRADICIONAL
-const char* MQTT_CLIENT_ID = "ESP32_Remota_001"; // ID único do cliente
-const char* MQTT_USERNAME = "Romota1";          // Usuário criado no HiveMQ Cloud
-const char* MQTT_PASSWORD = "Senha1234";        // Senha do usuário HiveMQ Cloud
+// Broker MQTT Local - Sem SSL na porta 1883
+extern const char* MQTT_SERVER;
+extern const int MQTT_PORT;
+extern const char* MQTT_CLIENT_ID;
 
 // ===== TÓPICOS MQTT =====
-const char* TOPIC_COMANDO = "alimentador/remota/comando";           // Recebe comandos do CENTRAL
-const char* TOPIC_STATUS = "alimentador/remota/status";             // Envia status para CENTRAL
-const char* TOPIC_CONCLUIDO = "alimentador/remota/concluido";       // Envia quando concluído para CENTRAL
-const char* TOPIC_HEARTBEAT = "alimentador/remota/heartbeat";       // Sinal de vida
+extern const char* TOPIC_COMANDO;
+extern const char* TOPIC_STATUS;
+extern const char* TOPIC_RESPOSTA;
+extern const char* TOPIC_HEARTBEAT;
+extern const char* TOPIC_ALERTA_RACAO;
 
 // ===== CONFIGURAÇÃO DO HARDWARE =====
-const int PINO_SERVO = 5;      // Pino do servo
-const int PINO_HALL = 4;       // Pino do sensor Hall
-const int PINO_BOTAO = 18;      // Pino do botão
-const int PINO_LED_STATUS = 13; // Pino do LED de status
+extern const int PINO_SERVO;
+extern const int PINO_HALL;
+extern const int PINO_BOTAO;
+extern const int PINO_LED_STATUS;
+extern const int PINO_HCSR04_TRIGGER;
+extern const int PINO_HCSR04_ECHO;
+
+// ===== CONFIGURAÇÕES DO SENSOR HCSR04 =====
+extern const float DISTANCIA_LIMITE_RACAO;
+extern const unsigned long INTERVALO_MONITORAMENTO_RACAO;
+
+// ===== CONFIGURAÇÕES GERAIS =====
+extern const unsigned long SERIAL_BAUD_RATE;
+extern const unsigned long MAIN_LOOP_DELAY;
+
+// ===== CONFIGURAÇÕES DE DEBUG =====
+#define DEBUG_ENABLED true
+#define DEBUG_WIFI true
+#define DEBUG_MQTT true
+#define DEBUG_SENSORS true
+
+// Macros de debug
+#if DEBUG_ENABLED
+    #define DEBUG_PRINT(x) Serial.print(x)
+    #define DEBUG_PRINTLN(x) Serial.println(x)
+    #define DEBUG_PRINTF(x, ...) Serial.printf(x, __VA_ARGS__)
+#else
+    #define DEBUG_PRINT(x)
+    #define DEBUG_PRINTLN(x)
+    #define DEBUG_PRINTF(x, ...)
+#endif
 
 #endif

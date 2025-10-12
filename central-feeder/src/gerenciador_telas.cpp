@@ -1,8 +1,9 @@
 #include "gerenciador_telas.h"
 #include <config.h>
 #include <Preferences.h>
+#include "gerenciador_mqtt.h"
 
-// Inicialização de variáveis estáticas
+// InicializaÃ§Ã£o de variÃ¡veis estÃ¡ticas
 TipoTela GerenciadorTelas::telaAtual = TipoTela::INICIO;
 TipoTela GerenciadorTelas::telaAnterior = TipoTela::INICIO;
 int GerenciadorTelas::opcaoSelecionada = 0;
@@ -30,8 +31,14 @@ unsigned long GerenciadorTelas::ultimaAtualizacao = 0;
 unsigned long GerenciadorTelas::inicioTela = 0;
 bool GerenciadorTelas::timeoutHabilitado = false;
 
-// Controle de verificação automática de horários
+// Controle de verificaÃ§Ã£o automÃ¡tica de horÃ¡rios
 unsigned long GerenciadorTelas::ultimaVerificacaoHorarios = 0;
+
+// Controle de alerta de ração
+bool GerenciadorTelas::alertaRacaoAtivo = false;
+int GerenciadorTelas::remotaComAlerta = -1;
+unsigned long GerenciadorTelas::ultimaPiscadaAlerta = 0;
+bool GerenciadorTelas::estadoPiscaAlerta = false;
 
 // Callbacks
 void (*GerenciadorTelas::callbackResetSistema)() = nullptr;
@@ -39,44 +46,110 @@ void (*GerenciadorTelas::callbackAtualizacaoRefeicao)(int, int, int, int, int) =
 // Flag para controle de redraw
 bool GerenciadorTelas::precisaRedraw = false;
 
+// Sistema de paginação dinâmica
+int GerenciadorTelas::remotasConectadasCache[MAX_REMOTAS];
+int GerenciadorTelas::numRemotasConectadasCache = 0;
+
 void GerenciadorTelas::inicializar() {
     Serial.println("=== Inicializando Gerenciador de Telas ===");
-    
+
     // Carregar dados salvos
     carregarDadosRemota();
-    
-    // Configurar algumas remotas de exemplo se não há dados salvos
+
     if (numeroRemotas == 0) {
-        adicionarRemota(1, "Remota 1", false); // Começar como OFF até receber heartbeat
-        adicionarRemota(2, "Remota 2", false); // Começar como OFF até receber heartbeat
-        adicionarRemota(3, "Remota 3", false); // Começar como OFF até receber heartbeat
-        adicionarRemota(4, "Remota 4", false); // Começar como OFF até receber heartbeat
-        
-        // Configurar refeições de exemplo
-        definirRefeicao(1, 0, 8, 0, 40);    // 08:00, 40g
-        definirRefeicao(1, 1, 14, 30, 40);  // 14:30, 40g
-        definirRefeicao(1, 2, 20, 0, 40);   // 20:00, 40g
+        adicionarRemota(1, "Remota 1", false);
+        adicionarRemota(2, "Remota 2", false);
+        adicionarRemota(3, "Remota 3", false);
+        adicionarRemota(4, "Remota 4", false);
+
+        definirRefeicao(1, 0, 8, 0, 40);
+        definirRefeicao(1, 1, 14, 30, 40);
+        definirRefeicao(1, 2, 20, 0, 40);
     }
-    
+
     // Atualizar tempo de boot
     DadosTempo tempoAtual = GerenciadorTempo::obterTempoAtual();
     atualizarTempoBooter(tempoAtual.dataFormatada, tempoAtual.tempoFormatado);
-    
-    // Configurar callbacks MQTT para atualizar status das remotas
-    GerenciadorMQTT::definirCallbackStatusRemota(onStatusRemotaRecebido);
-    GerenciadorMQTT::definirCallbackVidaRemota(onVidaRemotaRecebida);
-    GerenciadorMQTT::definirCallbackRespostaRemota(onRespostaRemotaRecebida);
-    
-    // Configurar callback de tempo para atualização automática da tela
+
+    // ✅ Callback para atualizar tempo automaticamente
     GerenciadorTempo::definirCallbackAtualizacaoTempo([](DadosTempo tempo) {
         GerenciadorTelas::atualizarTempo();
     });
-    
-    // Inicializar na tela INICIO
+
+    // ✅ Começar na tela inicial
     irParaTela(TipoTela::INICIO);
-    
+
     Serial.println("Gerenciador de Telas inicializado");
 }
+
+
+// Alterar as implementações das funções callback para usar const String&:
+void GerenciadorTelas::onStatusRemotaRecebido(int idRemota, const String& status) {
+    DEBUG_PRINTF("[TELAS] Status recebido - Remota %d: %s\n", idRemota, status.c_str());
+    
+    for (int i = 0; i < numeroRemotas; i++) {
+        if (remotas[i].id == idRemota) {
+            bool conectada = (status == "ONLINE" || status == "ALIVE");
+            if (remotas[i].conectada != conectada) {
+                remotas[i].conectada = conectada;
+                precisaRedraw = true;
+                DEBUG_PRINTF("[TELAS] Remota %d status atualizado: %s\n", idRemota, conectada ? "ON" : "OFF");
+            }
+            break;
+        }
+    }
+}
+
+void GerenciadorTelas::onVidaRemotaRecebida(int idRemota, const String& status) {
+    bool viva = (status == "ALIVE" || status == "true" || status == "1");
+    DEBUG_PRINTF("[TELAS] Heartbeat recebido - Remota %d: %s\n", idRemota, viva ? "VIVA" : "MORTA");
+    
+    for (int i = 0; i < numeroRemotas; i++) {
+        if (remotas[i].id == idRemota) {
+            if (viva) {
+                remotas[i].ultimoHeartbeat = millis();
+                if (!remotas[i].conectada) {
+                    remotas[i].conectada = true;
+                    precisaRedraw = true;
+                }
+            } else {
+                if (remotas[i].conectada) {
+                    remotas[i].conectada = false;
+                    precisaRedraw = true;
+                }
+            }
+            break;
+        }
+    }
+}
+
+void GerenciadorTelas::onRespostaRemotaRecebida(int idRemota, const String& resposta) {
+    DEBUG_PRINTF("[TELAS] Resposta recebida - Remota %d: %s\n", idRemota, resposta.c_str());
+}
+
+void GerenciadorTelas::onAlertaRacaoRecebido(int idRemota, const String& alerta) {
+    DEBUG_PRINTF("Alerta recebido - Remota %d: %s\n", idRemota, alerta.c_str());
+    
+    if (alerta == "BAIXO" || alerta.indexOf("baixo") >= 0) {
+        alertaRacaoAtivo = true;
+        remotaComAlerta = idRemota;
+        
+        if (!estaEditando) {
+            irParaTela(TipoTela::ALERTA_RACAO_BAIXA);
+        }
+    }
+    else if (alerta == "OK" || alerta.indexOf("ok") >= 0) {
+        if (remotaComAlerta == idRemota) {
+            alertaRacaoAtivo = false;
+            remotaAtual = -1;
+            
+            if (telaAtual == TipoTela::ALERTA_RACAO_BAIXA) {
+                irParaTela(TipoTela::INICIO);
+            }
+        }
+    }
+}
+
 
 void GerenciadorTelas::atualizar() {
     unsigned long agora = millis();
@@ -92,8 +165,10 @@ void GerenciadorTelas::atualizar() {
             verificarTimeoutRemotas(agora);
         }
         
-        // Verificar horários de alimentação automática
+        // Verificar horÃ¡rios de alimentaÃ§Ã£o automÃ¡tica
         verificarHorariosAutomaticos();
+        // Verificar alertas de ração
+        verificarAlertas();
         
         // Verificar timeout se habilitado
         if (timeoutHabilitado && verificarTimeout()) {
@@ -101,7 +176,7 @@ void GerenciadorTelas::atualizar() {
             return;
         }
         
-        // Processar navegação e sinalizar redraw se mudou seleção ou tela
+        // Processar navegaÃ§Ã£o e sinalizar redraw se mudou seleÃ§Ã£o ou tela
         TipoTela telaAntiga = telaAtual;
         int opcaoAntiga = opcaoSelecionada;
         int campoAntigo = campoEdicao;
@@ -109,7 +184,7 @@ void GerenciadorTelas::atualizar() {
         
         gerenciarNavegacao();
         
-        // Redraw se mudou tela, seleção, campo de edição ou estado de edição
+        // Redraw se mudou tela, seleÃ§Ã£o, campo de ediÃ§Ã£o ou estado de ediÃ§Ã£o
         if (telaAtual != telaAntiga || opcaoSelecionada != opcaoAntiga || 
             campoEdicao != campoAntigo || estaEditando != estaEditandoAntigo || precisaRedraw) {
             precisaRedraw = true;
@@ -160,6 +235,9 @@ void GerenciadorTelas::renderizar() {
         case TipoTela::EDITAR_QUANTIDADE:
             renderizarEditarQuantidade();
             break;
+        case TipoTela::ALERTA_RACAO_BAIXA:
+            renderizarAlertaRacao();
+            break;
     }
 }
 
@@ -198,15 +276,17 @@ void GerenciadorTelas::gerenciarNavegacao() {
         case TipoTela::EDITAR_QUANTIDADE:
             navegarEditarQuantidade();
             break;
+        case TipoTela::ALERTA_RACAO_BAIXA:
+            navegarAlertaRacao();
+            break;
     }
 }
 
 // =============================================================================
-// MÉTODOS DE RENDERIZAÇÃO
+// MÃ‰TODOS DE RENDERIZAÃ‡ÃƒO
 // =============================================================================
 
 void GerenciadorTelas::renderizarInicio() {
-    
     // Linha 1: Hora atual
     DadosTempo tempoAtual = GerenciadorTempo::obterTempoAtual();
     centralizarTexto(0, tempoAtual.tempoFormatado);
@@ -225,11 +305,12 @@ void GerenciadorTelas::renderizarInicio() {
 }
 
 void GerenciadorTelas::renderizarInfoWifi() {
-    
     Display::printAt(0, 0, "Rede: " + wifiSSID);
     Display::printAt(0, 1, String("WiFi: ") + (wifiConectado ? "Conectado" : "Desconectado"));
     Display::printAt(0, 2, "Qualidade: " + qualidadeWifi);
-    Display::printAt(0, 3, String("MQTT: ") + GerenciadorMQTT::obterStatusConexao());
+
+    // Usar variável membro mqttConectado para evitar acesso a ponteiro
+    Display::printAt(0, 3, String("MQTT: ") + (mqttConectado ? "Conectado" : "Desconectado"));
 }
 
 void GerenciadorTelas::renderizarConfigCentral() {
@@ -269,34 +350,56 @@ void GerenciadorTelas::renderizarResetar() {
 }
 
 void GerenciadorTelas::renderizarListaRemotasP1() {
-    
-    // Mostrar até 3 remotas
-    for (int i = 0; i < 3 && i < numeroRemotas; i++) {
-        Display::setCursor(0, i);
-        String status = remotas[i].conectada ? "OK" : "OFF";
-        String linha = remotas[i].nome + ": " + status;
-        
+    // Contar quantas remotas conectadas existem e criar mapeamento
+    int remotasConectadas[MAX_REMOTAS];
+    int numConectadas = 0;
+    for (int i = 0; i < numeroRemotas && numConectadas < MAX_REMOTAS; i++) {
+        if (remotas[i].conectada) {
+            remotasConectadas[numConectadas++] = i;
+        }
+    }
+
+    // Mostrar atÃ© 3 remotas conectadas
+    int linhasUsadas = 0;
+    for (int i = 0; i < 3 && i < numConectadas; i++) {
+        int indiceRemota = remotasConectadas[i];
+        Display::setCursor(0, linhasUsadas);
+        String linha = remotas[indiceRemota].nome + ": OK";
+
         if (i == opcaoSelecionada) {
             Display::print("> " + linha);
         } else {
             Display::print("  " + linha);
         }
+        linhasUsadas++;
     }
-    
-    // Mostrar opção baseada no número de remotas
-    int linhaOpcao = min(numeroRemotas, 3);
-    Display::setCursor(0, linhaOpcao);
-    
-    if (numeroRemotas > 3) {
-        // Há mais remotas - mostrar "Próxima página"
-        if (opcaoSelecionada == linhaOpcao) {
+
+    // Se nÃ£o hÃ¡ remotas conectadas, mostrar mensagem
+    if (numConectadas == 0) {
+        centralizarTexto(1, "Nenhuma remota");
+        centralizarTexto(2, "conectada");
+        Display::setCursor(0, 3);
+        if (opcaoSelecionada == 0) {
+            Display::print("> Voltar");
+        } else {
+            Display::print("  Voltar");
+        }
+        return;
+    }
+
+    // Mostrar opÃ§Ã£o baseada no nÃºmero de remotas conectadas
+    Display::setCursor(0, linhasUsadas);
+
+    if (numConectadas > 3) {
+        // HÃ¡ mais remotas conectadas - mostrar "PrÃ³xima pÃ¡gina"
+        if (opcaoSelecionada == min(numConectadas, 3)) {
             Display::print("> Proxima pagina");
         } else {
             Display::print("  Proxima pagina");
         }
     } else {
-        // Não há mais remotas - mostrar "Voltar"
-        if (opcaoSelecionada == linhaOpcao) {
+        // NÃ£o hÃ¡ mais remotas conectadas - mostrar "Voltar"
+        if (opcaoSelecionada == numConectadas) {
             Display::print("> Voltar");
         } else {
             Display::print("  Voltar");
@@ -305,30 +408,48 @@ void GerenciadorTelas::renderizarListaRemotasP1() {
 }
 
 void GerenciadorTelas::renderizarListaRemotasP2() {
-    
-    // Mostrar remota 4 se existir (índice 3)
-    if (numeroRemotas > 3) {
+    // Contar quantas remotas conectadas existem e criar mapeamento
+    int remotasConectadas[MAX_REMOTAS];
+    int numConectadas = 0;
+    for (int i = 0; i < numeroRemotas && numConectadas < MAX_REMOTAS; i++) {
+        if (remotas[i].conectada) {
+            remotasConectadas[numConectadas++] = i;
+        }
+    }
+
+    // Mostrar remota 4 em diante (se houver mais de 3 conectadas)
+    int linhasUsadas = 0;
+    if (numConectadas > 3) {
+        int indiceRemota = remotasConectadas[3]; // Quarta remota conectada
         Display::setCursor(0, 0);
-        String status = remotas[3].conectada ? "OK" : "OFF";
-        String linha = remotas[3].nome + ": " + status;
-        
+        String linha = remotas[indiceRemota].nome + ": OK";
+
         if (opcaoSelecionada == 0) {
             Display::print("> " + linha);
         } else {
             Display::print("  " + linha);
         }
+        linhasUsadas++;
     }
-    
-    // Opção voltar
-    int linhaVoltar = (numeroRemotas > 3) ? 1 : 0;
-    Display::setCursor(0, linhaVoltar);
-    if (opcaoSelecionada == linhaVoltar) {
-        Display::print("> Voltar");
+
+    // OpÃ§Ã£o PÃ¡gina Anterior
+    Display::setCursor(0, linhasUsadas);
+    if (opcaoSelecionada == (numConectadas > 3 ? 1 : 0)) {
+        Display::print("> Pagina Anterior");
     } else {
-        Display::print("  Voltar");
+        Display::print("  Pagina Anterior");
     }
-    
-    // Indicador de página
+    linhasUsadas++;
+
+    // OpÃ§Ã£o Menu Principal
+    Display::setCursor(0, linhasUsadas);
+    if (opcaoSelecionada == (numConectadas > 3 ? 2 : 1)) {
+        Display::print("> Menu Principal");
+    } else {
+        Display::print("  Menu Principal");
+    }
+
+    // Indicador de pÃ¡gina
     Display::printAt(0, 3, "[Pagina 2/2]");
 }
 
@@ -337,7 +458,7 @@ void GerenciadorTelas::renderizarRemotaEspecifica() {
     if (remotaAtual < numeroRemotas) {
         Remota& remota = remotas[remotaAtual];
         
-        // Mostrar refeições
+        // Mostrar refeiÃ§Ãµes
         for (int i = 0; i < 3; i++) {
             Display::setCursor(0, i);
             String strTempo = formatarHora(remota.refeicoes[i].hora, remota.refeicoes[i].minuto);
@@ -350,7 +471,7 @@ void GerenciadorTelas::renderizarRemotaEspecifica() {
             }
         }
         
-        // Opção voltar
+        // OpÃ§Ã£o voltar
         Display::setCursor(0, 3);
         if (opcaoSelecionada == 3) {
             Display::print("> Voltar");
@@ -401,7 +522,7 @@ void GerenciadorTelas::renderizarEditarHora() {
         if (strMinuto.length() < 2) strMinuto = "0" + strMinuto;
         
         if (!estaEditando) {
-            // Aguardando Enter para começar
+            // Aguardando Enter para comeÃ§ar
             Display::printAt(0, 1, "Pressione Enter");
             Display::printAt(0, 2, "    [" + strHora + "]:[" + strMinuto + "]");
         } else {
@@ -439,7 +560,7 @@ void GerenciadorTelas::renderizarEditarQuantidade() {
 }
 
 // =============================================================================
-// MÉTODOS DE NAVEGAÇÃO
+// MÃ‰TODOS DE NAVEGAÃ‡ÃƒO
 // =============================================================================
 
 void GerenciadorTelas::navegarInicio() {
@@ -517,8 +638,25 @@ void GerenciadorTelas::navegarResetar() {
 }
 
 void GerenciadorTelas::navegarListaRemotasP1() {
-    int maxOpcoes = min(numeroRemotas, 3) + 1; // +1 para incluir a opção extra (Próxima página ou Voltar)
-    
+    // Contar remotas conectadas e criar mapeamento
+    int remotasConectadas[MAX_REMOTAS];
+    int numConectadas = 0;
+    for (int i = 0; i < numeroRemotas && numConectadas < MAX_REMOTAS; i++) {
+        if (remotas[i].conectada) {
+            remotasConectadas[numConectadas++] = i;
+        }
+    }
+
+    // Se nÃ£o hÃ¡ remotas conectadas, apenas voltar
+    if (numConectadas == 0) {
+        if (Botoes::enterPressionado() || Botoes::cimaPressionado() || Botoes::baixoPressionado()) {
+            irParaTela(TipoTela::INICIO);
+        }
+        return;
+    }
+
+    int maxOpcoes = min(numConectadas, 3) + 1; // +1 para opÃ§Ã£o extra
+
     if (Botoes::cimaPressionado()) {
         opcaoSelecionada = (opcaoSelecionada - 1 + maxOpcoes) % maxOpcoes;
     }
@@ -526,17 +664,17 @@ void GerenciadorTelas::navegarListaRemotasP1() {
         opcaoSelecionada = (opcaoSelecionada + 1) % maxOpcoes;
     }
     else if (Botoes::enterPressionado()) {
-        if (opcaoSelecionada < min(numeroRemotas, 3)) {
-            // Selecionou uma remota
-            remotaAtual = opcaoSelecionada;
+        if (opcaoSelecionada < min(numConectadas, 3)) {
+            // Selecionou uma remota conectada - mapear para Ã­ndice real
+            remotaAtual = remotasConectadas[opcaoSelecionada];
             irParaTela(TipoTela::REMOTA_ESPECIFICA);
         } else {
-            // Selecionou a opção extra
-            if (numeroRemotas > 3) {
-                // Há mais remotas - ir para próxima página
+            // Selecionou a opÃ§Ã£o extra
+            if (numConectadas > 3) {
+                // HÃ¡ mais remotas conectadas - ir para prÃ³xima pÃ¡gina
                 irParaTela(TipoTela::LISTA_REMOTAS_P2);
             } else {
-                // Não há mais remotas - voltar para Inicio
+                // NÃ£o hÃ¡ mais remotas - voltar para Inicio
                 irParaTela(TipoTela::INICIO);
             }
         }
@@ -544,8 +682,17 @@ void GerenciadorTelas::navegarListaRemotasP1() {
 }
 
 void GerenciadorTelas::navegarListaRemotasP2() {
-    int maxOpcoes = (numeroRemotas > 3) ? 2 : 1; // Se tem remota 4: Remota4 + Voltar, senão só Voltar
-    
+    // Contar remotas conectadas e criar mapeamento
+    int remotasConectadas[MAX_REMOTAS];
+    int numConectadas = 0;
+    for (int i = 0; i < numeroRemotas && numConectadas < MAX_REMOTAS; i++) {
+        if (remotas[i].conectada) {
+            remotasConectadas[numConectadas++] = i;
+        }
+    }
+
+    int maxOpcoes = (numConectadas > 3) ? 3 : 2; // Remota4 conectada + PÃ¡gina Anterior + Menu Principal
+
     if (Botoes::cimaPressionado()) {
         opcaoSelecionada = (opcaoSelecionada - 1 + maxOpcoes) % maxOpcoes;
     }
@@ -553,13 +700,16 @@ void GerenciadorTelas::navegarListaRemotasP2() {
         opcaoSelecionada = (opcaoSelecionada + 1) % maxOpcoes;
     }
     else if (Botoes::enterPressionado()) {
-        if (numeroRemotas > 3 && opcaoSelecionada == 0) {
-            // Selecionou Remota 4 (índice 3)
-            remotaAtual = 3;
+        if (numConectadas > 3 && opcaoSelecionada == 0) {
+            // Selecionou quarta remota conectada - mapear para Ã­ndice real
+            remotaAtual = remotasConectadas[3];
             irParaTela(TipoTela::REMOTA_ESPECIFICA);
-        } else {
-            // Selecionou Voltar - ir para página 1 das remotas
+        } else if (opcaoSelecionada == 1 || (numConectadas <= 3 && opcaoSelecionada == 0)) {
+            // PÃ¡gina Anterior
             irParaTela(TipoTela::LISTA_REMOTAS_P1);
+        } else {
+            // Menu Principal
+            irParaTela(TipoTela::INICIO);
         }
     }
 }
@@ -573,10 +723,12 @@ void GerenciadorTelas::navegarRemotaEspecifica() {
     }
     else if (Botoes::enterPressionado()) {
         if (opcaoSelecionada < 3) {
+            // Remover a verificaÃ§Ã£o restritiva de conexÃ£o
+            // Permitir ediÃ§Ã£o sempre, pois a web interface jÃ¡ confirma que funciona
             refeicaoAtual = opcaoSelecionada;
             irParaTela(TipoTela::CONFIG_REFEICAO);
         } else {
-            // Voltar para a página correta das remotas
+            // Voltar para a pÃ¡gina correta das remotas
             if (remotaAtual < 3) {
                 irParaTela(TipoTela::LISTA_REMOTAS_P1);
             } else {
@@ -597,7 +749,7 @@ void GerenciadorTelas::navegarConfigRefeicao() {
         if (opcaoSelecionada == 0) { // Editar Hora
             campoEdicao = 0;
             irParaTela(TipoTela::EDITAR_HORA);
-            // NÃO iniciar edição automaticamente - precisa pressionar Enter na tela
+            // NÃƒO iniciar ediÃ§Ã£o automaticamente - precisa pressionar Enter na tela
         }
         else if (opcaoSelecionada == 1) { // Editar Quantidade
             campoEdicao = 0;
@@ -611,18 +763,18 @@ void GerenciadorTelas::navegarConfigRefeicao() {
 
 void GerenciadorTelas::navegarEditarHora() {
     if (!estaEditando) {
-        // Ainda não começou a editar - esperar Enter para começar
+        // Ainda nÃ£o comeÃ§ou a editar - esperar Enter para comeÃ§ar
         if (Botoes::enterPressionado()) {
-            Serial.println("DEBUG: Enter detectado - iniciando edição");
+            Serial.println("DEBUG: Enter detectado - iniciando ediÃ§Ã£o");
             estaEditando = true;
-            campoEdicao = 0; // começar com a hora
-            precisaRedraw = true; // forçar redraw para mostrar modo edição
+            campoEdicao = 0; // comeÃ§ar com a hora
+            precisaRedraw = true; // forÃ§ar redraw para mostrar modo ediÃ§Ã£o
         } else if (Botoes::cimaPressionado() || Botoes::baixoPressionado()) {
             // Voltar sem editar
             irParaTela(TipoTela::CONFIG_REFEICAO);
         }
     } else {
-        // Modo edição ativo
+        // Modo ediÃ§Ã£o ativo
         Refeicao& refeicao = remotas[remotaAtual].refeicoes[refeicaoAtual];
         
         if (Botoes::cimaPressionado()) {
@@ -631,7 +783,7 @@ void GerenciadorTelas::navegarEditarHora() {
             } else { // editando minuto
                 refeicao.minuto = (refeicao.minuto + 1) % 60;
             }
-            precisaRedraw = true; // forçar redraw para mostrar novo valor
+            precisaRedraw = true; // forÃ§ar redraw para mostrar novo valor
         }
         else if (Botoes::baixoPressionado()) {
             if (campoEdicao == 0) { // editando hora
@@ -639,7 +791,7 @@ void GerenciadorTelas::navegarEditarHora() {
             } else { // editando minuto
                 refeicao.minuto = (refeicao.minuto - 1 + 60) % 60;
             }
-            precisaRedraw = true; // forçar redraw para mostrar novo valor
+            precisaRedraw = true; // forÃ§ar redraw para mostrar novo valor
         }
         else if (Botoes::enterPressionado()) {
             if (campoEdicao == 0) {
@@ -666,7 +818,7 @@ void GerenciadorTelas::navegarEditarQuantidade() {
     if (!estaEditando) {
         if (Botoes::enterPressionado()) {
             estaEditando = true;
-            precisaRedraw = true; // forçar redraw para mostrar modo edição
+            precisaRedraw = true; // forÃ§ar redraw para mostrar modo ediÃ§Ã£o
         } else if (Botoes::cimaPressionado() || Botoes::baixoPressionado()) {
             irParaTela(TipoTela::CONFIG_REFEICAO);
         }
@@ -675,14 +827,14 @@ void GerenciadorTelas::navegarEditarQuantidade() {
         
         if (Botoes::cimaPressionado()) {
             refeicao.quantidade = min(refeicao.quantidade + 10, 990);
-            precisaRedraw = true; // forçar redraw para mostrar novo valor
+            precisaRedraw = true; // forÃ§ar redraw para mostrar novo valor
         }
         else if (Botoes::baixoPressionado()) {
             refeicao.quantidade = max(refeicao.quantidade - 10, 0);
-            precisaRedraw = true; // forçar redraw para mostrar novo valor
+            precisaRedraw = true; // forÃ§ar redraw para mostrar novo valor
         }
         else if (Botoes::enterPressionado()) {
-            // Salvar e voltar para configuração de refeição
+            // Salvar e voltar para configuraÃ§Ã£o de refeiÃ§Ã£o
             salvarDadosRemota();
             if (callbackAtualizacaoRefeicao) {
                 callbackAtualizacaoRefeicao(remotaAtual, refeicaoAtual, refeicao.hora, refeicao.minuto, refeicao.quantidade);
@@ -694,7 +846,7 @@ void GerenciadorTelas::navegarEditarQuantidade() {
 }
 
 // =============================================================================
-// MÉTODOS UTILITÁRIOS
+// MÃ‰TODOS UTILITÃRIOS
 // =============================================================================
 
 void GerenciadorTelas::resetarSelecao() {
@@ -709,7 +861,7 @@ void GerenciadorTelas::irParaTela(TipoTela tela) {
     inicioTela = millis();
     resetarSelecao();
     
-    // Configurar timeout para telas de informação
+    // Configurar timeout para telas de informaÃ§Ã£o
     timeoutHabilitado = (tela == TipoTela::INFO_WIFI || 
                         tela == TipoTela::CONFIG_ULTIMO_BOOT);
     
@@ -746,7 +898,7 @@ void GerenciadorTelas::atualizarBarraProgresso(int progresso) {
     
     String barra = "";
     for (int i = 0; i < tamanhoBar; i++) {
-        barra += (i < preenchido) ? "█" : "░";
+        barra += (i < preenchido) ? "â–ˆ" : "â–‘";
     }
     
     Display::print(barra + " " + String(progresso) + "%");
@@ -766,7 +918,7 @@ bool GerenciadorTelas::verificarTimeout() {
 }
 
 // =============================================================================
-// PERSISTÊNCIA DE DADOS
+// PERSISTÃŠNCIA DE DADOS
 // =============================================================================
 
 void GerenciadorTelas::salvarDadosRemota() {
@@ -825,7 +977,7 @@ void GerenciadorTelas::carregarDadosRemota() {
 }
 
 // =============================================================================
-// MÉTODOS PÚBLICOS DE ATUALIZAÇÃO
+// MÃ‰TODOS PÃšBLICOS DE ATUALIZAÃ‡ÃƒO
 // =============================================================================
 
 void GerenciadorTelas::atualizarStatusWifi(String ssid, bool conectado, String qualidade) {
@@ -839,19 +991,28 @@ void GerenciadorTelas::atualizarStatusMqtt(bool conectado) {
 }
 
 void GerenciadorTelas::atualizarTempo() {
-    // Forçar atualização da tela quando o tempo muda
+    // ForÃ§ar atualizaÃ§Ã£o da tela quando o tempo muda
     // Isso garante que a hora seja atualizada automaticamente
     static String tempoAnterior = "";
     
     DadosTempo tempoAtual = GerenciadorTempo::obterTempoAtual();
     
-    // Se o tempo formatado mudou, força redraw da tela
+    // Se o tempo formatado mudou, forÃ§a redraw da tela
     if (tempoAtual.tempoFormatado != tempoAnterior) {
         tempoAnterior = tempoAtual.tempoFormatado;
-        precisaRedraw = true; // Força atualização da tela
+        precisaRedraw = true; // ForÃ§a atualizaÃ§Ã£o da tela
         
-        // Debug para acompanhar a atualização automática
-        Serial.printf("⏰ [DISPLAY] Hora atualizada automaticamente: %s\n", tempoAtual.tempoFormatado.c_str());
+        // Debug para acompanhar a atualizaÃ§Ã£o automÃ¡tica
+        Serial.printf("â° [DISPLAY] Hora atualizada automaticamente: %s\n", tempoAtual.tempoFormatado.c_str());
+    }
+    
+    // VerificaÃ§Ã£o de mudanÃ§as nas Preferences a cada 10 segundos
+    static unsigned long ultimaVerificacaoPrefs = 0;
+    unsigned long agora = millis();
+    
+    if (agora - ultimaVerificacaoPrefs > 3000) {
+        ultimaVerificacaoPrefs = agora;
+        sincronizarComPreferences();
     }
 }
 
@@ -859,7 +1020,50 @@ void GerenciadorTelas::atualizarTempoBooter(String data, String hora) {
     dataUltimoBooter = data;
     horaUltimoBooter = hora;
 }
-
+void GerenciadorTelas::sincronizarComPreferences() {
+    Preferences prefs;
+    prefs.begin("remotas", true);
+    
+    bool precisaRecarregar = false;
+    
+    // Verificar TODAS as remotas e TODAS as refeiÃ§Ãµes
+    for (int i = 0; i < numeroRemotas; i++) {
+        for (int j = 0; j < REFEICOES_PER_REMOTA; j++) {
+            String prefixo = "r" + String(i) + "_";
+            String refPrefixo = prefixo + "ref" + String(j) + "_";
+            
+            int horaPrefs = prefs.getInt((refPrefixo + "hora").c_str(), -1);
+            int minutoPrefs = prefs.getInt((refPrefixo + "min").c_str(), -1);
+            int quantidadePrefs = prefs.getInt((refPrefixo + "quant").c_str(), -1);
+            
+            // Se os dados sÃ£o diferentes, precisa recarregar
+            if (horaPrefs != -1 && (
+                horaPrefs != remotas[i].refeicoes[j].hora ||
+                minutoPrefs != remotas[i].refeicoes[j].minuto ||
+                quantidadePrefs != remotas[i].refeicoes[j].quantidade)) {
+                
+                precisaRecarregar = true;
+                DEBUG_PRINTF("[TELAS] MudanÃ§a detectada via web: Remota %d, RefeiÃ§Ã£o %d\n", i+1, j+1);
+                DEBUG_PRINTF("   MemÃ³ria: %02d:%02d %dg\n", 
+                           remotas[i].refeicoes[j].hora, 
+                           remotas[i].refeicoes[j].minuto, 
+                           remotas[i].refeicoes[j].quantidade);
+                DEBUG_PRINTF("   Preferences: %02d:%02d %dg\n", horaPrefs, minutoPrefs, quantidadePrefs);
+                break;
+            }
+        }
+        if (precisaRecarregar) break;
+    }
+    
+    prefs.end();
+    
+    if (precisaRecarregar) {
+        DEBUG_PRINTLN("[TELAS] Recarregando todos os dados das Preferences...");
+        carregarDadosRemota();
+        precisaRedraw = true; // ForÃ§ar redraw da tela
+        DEBUG_PRINTLN("[TELAS] SincronizaÃ§Ã£o completa - tela atualizada");
+    }
+}
 void GerenciadorTelas::adicionarRemota(int id, String nome, bool conectada) {
     if (numeroRemotas < MAX_REMOTAS) {
         remotas[numeroRemotas].id = id;
@@ -867,7 +1071,7 @@ void GerenciadorTelas::adicionarRemota(int id, String nome, bool conectada) {
         remotas[numeroRemotas].conectada = conectada;
         remotas[numeroRemotas].ultimoHeartbeat = 0; // Inicializar sem heartbeat
         
-        // Inicializar refeições padrão
+        // Inicializar refeiÃ§Ãµes padrÃ£o
         for (int i = 0; i < REFEICOES_PER_REMOTA; i++) {
             remotas[numeroRemotas].refeicoes[i].hora = 8 + i * 6;
             remotas[numeroRemotas].refeicoes[i].minuto = 0;
@@ -948,60 +1152,10 @@ void GerenciadorTelas::verificarTimeoutRemotas(unsigned long agora) {
         if (remotas[i].conectada && (agora - remotas[i].ultimoHeartbeat > TIMEOUT_HEARTBEAT)) {
             remotas[i].conectada = false;
             precisaRedraw = true;
-            DEBUG_PRINTF("[TELAS] Remota %d marcada como OFF por timeout (sem heartbeat há %lu ms)\n", 
+            DEBUG_PRINTF("[TELAS] Remota %d marcada como OFF por timeout (sem heartbeat hÃ¡ %lu ms)\n", 
                         remotas[i].id, agora - remotas[i].ultimoHeartbeat);
         }
     }
-}
-
-void GerenciadorTelas::onStatusRemotaRecebido(int idRemota, String status) {
-    DEBUG_PRINTF("[TELAS] Status recebido - Remota %d: %s\n", idRemota, status.c_str());
-    
-    // Encontrar a remota pelo ID e atualizar status
-    for (int i = 0; i < numeroRemotas; i++) {
-        if (remotas[i].id == idRemota) {
-            bool conectada = (status == "ONLINE" || status == "ALIVE");
-            if (remotas[i].conectada != conectada) {
-                remotas[i].conectada = conectada;
-                precisaRedraw = true; // Forçar redraw da tela
-                DEBUG_PRINTF("[TELAS] Remota %d status atualizado: %s\n", idRemota, conectada ? "ON" : "OFF");
-            }
-            break;
-        }
-    }
-}
-
-void GerenciadorTelas::onVidaRemotaRecebida(int idRemota, bool viva) {
-    DEBUG_PRINTF("[TELAS] Heartbeat recebido - Remota %d: %s\n", idRemota, viva ? "VIVA" : "MORTA");
-    
-    // Encontrar a remota pelo ID e atualizar status de vida
-    for (int i = 0; i < numeroRemotas; i++) {
-        if (remotas[i].id == idRemota) {
-            if (viva) {
-                remotas[i].ultimoHeartbeat = millis(); // Atualizar timestamp
-                if (!remotas[i].conectada) {
-                    remotas[i].conectada = true;
-                    precisaRedraw = true;
-                    DEBUG_PRINTF("[TELAS] Remota %d heartbeat atualizado: ON\n", idRemota);
-                }
-            } else {
-                // Heartbeat indica que está morta
-                if (remotas[i].conectada) {
-                    remotas[i].conectada = false;
-                    precisaRedraw = true;
-                    DEBUG_PRINTF("[TELAS] Remota %d heartbeat atualizado: OFF\n", idRemota);
-                }
-            }
-            break;
-        }
-    }
-}
-
-void GerenciadorTelas::onRespostaRemotaRecebida(int idRemota, String resposta) {
-    DEBUG_PRINTF("[TELAS] Resposta recebida - Remota %d: %s\n", idRemota, resposta.c_str());
-    
-    // Aqui podemos adicionar lógica adicional para processar respostas específicas
-    // Por exemplo, atualizar timestamps de última execução de refeições
 }
 
 // =============================================================================
@@ -1010,81 +1164,150 @@ void GerenciadorTelas::onRespostaRemotaRecebida(int idRemota, String resposta) {
 
 void GerenciadorTelas::verificarHorariosAutomaticos() {
     unsigned long agora = millis();
-    
+
     // Verificar apenas a cada 30 segundos (para não sobrecarregar)
     const unsigned long INTERVALO_VERIFICACAO = 30000; // 30 segundos
     if (agora - ultimaVerificacaoHorarios < INTERVALO_VERIFICACAO) {
         return;
     }
-    
+
     ultimaVerificacaoHorarios = agora;
-    
+
     // Obter tempo atual
     DadosTempo tempoAtual = GerenciadorTempo::obterTempoAtual();
     int horaAtual = tempoAtual.hora;
     int minutoAtual = tempoAtual.minuto;
-    
+
     // Print de debug para mostrar verificação
     Serial.printf("🕐 [HORARIOS] Verificação automática: %02d:%02d\n", horaAtual, minutoAtual);
-    
+
     // Verificar cada remota cadastrada
     for (int r = 0; r < numeroRemotas; r++) {
         int idRemota = remotas[r].id;
-        
+
         // Só verificar remotas conectadas
         if (!remotas[r].conectada) {
             continue;
         }
-        
+
         // Verificar cada refeição da remota
         for (int ref = 0; ref < REFEICOES_PER_REMOTA; ref++) {
             Refeicao* refeicao = &remotas[r].refeicoes[ref];
-            
+
             // Verificar se o horário programado coincide com o horário atual
             if (refeicao->hora == horaAtual && refeicao->minuto == minutoAtual) {
-                
+
                 // Print de debug da flag encontrada
                 Serial.printf("🚨 [HORARIOS] FLAG ATIVADA! Remota %d, Refeição %d\n", idRemota, ref + 1);
                 Serial.printf("    ⏰ Horário programado: %02d:%02d\n", refeicao->hora, refeicao->minuto);
                 Serial.printf("    ⏰ Horário atual: %02d:%02d\n", horaAtual, minutoAtual);
                 Serial.printf("    🍽️ Quantidade: %dg\n", refeicao->quantidade);
-                
+
                 // Calcular tempo de alimentação (a cada 10g = 1 segundo)
                 int tempoSegundos = refeicao->quantidade / 10;
                 if (tempoSegundos < 1) tempoSegundos = 1; // Mínimo de 1 segundo
                 if (tempoSegundos > 30) tempoSegundos = 30; // Máximo de 30 segundos
-                
-                Serial.printf("    ⏱️ Tempo calculado: %d segundos (quantidade %dg ÷ 10)\n", 
+
+                Serial.printf("    ⏱️ Tempo calculado: %d segundos (quantidade %dg ÷ 10)\n",
                              tempoSegundos, refeicao->quantidade);
-                
+
                 // Enviar comando MQTT para alimentar
-                if (GerenciadorMQTT::estaConectado()) {
+                if (GerenciadorMQTT::instance && GerenciadorMQTT::instance->estaConectado()) {
                     Serial.printf("📤 [HORARIOS] Enviando comando ALIMENTAR para Remota %d...\n", idRemota);
-                    
-                    bool resultado = GerenciadorMQTT::enviarComandoGeral("alimentar", tempoSegundos, idRemota);
-                    
+
+                    bool resultado = GerenciadorMQTT::instance->enviarComandoGeral("alimentar", tempoSegundos, idRemota);
+
                     if (resultado) {
                         Serial.printf("✅ [HORARIOS] Comando enviado com sucesso!\n");
-                        
+
                         // Atualizar última execução
                         String tempoFormatado = formatarHora(horaAtual, minutoAtual);
                         refeicao->ultimaExecucao = tempoFormatado;
-                        
+
                         // Salvar dados atualizados
                         salvarDadosRemota();
-                        
+
                         Serial.printf("💾 [HORARIOS] Última execução atualizada: %s\n", tempoFormatado.c_str());
-                        
+
                     } else {
                         Serial.printf("❌ [HORARIOS] Falha ao enviar comando MQTT\n");
                     }
-                    
+
                 } else {
                     Serial.printf("❌ [HORARIOS] MQTT não conectado - comando não enviado\n");
                 }
-                
+
                 Serial.println("🚨 [HORARIOS] ==========================================");
             }
         }
+    }
+}
+
+// =============================================================================
+// SISTEMA DE ALERTA DE RAÇÃO BAIXA
+// =============================================================================
+
+void GerenciadorTelas::renderizarAlertaRacao() {
+    unsigned long agora = millis();
+
+    // Piscada a cada 500ms
+    if (agora - ultimaPiscadaAlerta > ALERTA_PISCADA_INTERVALO) {
+        ultimaPiscadaAlerta = agora;
+        estadoPiscaAlerta = !estadoPiscaAlerta;
+        precisaRedraw = true;
+    }
+
+    if (estadoPiscaAlerta) {
+        // Mostrar alerta (piscada visível)
+        centralizarTexto(0, ALERTA_RACAO_TITULO);
+        centralizarTexto(1, ALERTA_RACAO_LINHA1);
+
+        char buffer[20];
+        sprintf(buffer, ALERTA_RACAO_LINHA2, remotaComAlerta);
+        centralizarTexto(2, String(buffer));
+
+        centralizarTexto(3, ALERTA_RACAO_LINHA3);
+    } else {
+        // Tela "vazia" (piscada invisível)
+        Display::clear();
+    }
+}
+
+void GerenciadorTelas::navegarAlertaRacao() {
+    // Qualquer botão volta para o menu principal quando alerta não está mais ativo
+    if (!alertaRacaoAtivo && (Botoes::cimaPressionado() || Botoes::baixoPressionado() || Botoes::enterPressionado())) {
+        irParaTela(TipoTela::INICIO);
+    }
+}
+
+void GerenciadorTelas::verificarAlertas() {
+    static unsigned long ultimoAlertaPeriodico = 0;
+    unsigned long agora = millis();
+
+    // Se há alerta ativo, verificar se é hora de mostrar o alerta novamente
+    if (alertaRacaoAtivo) {
+        // Mostrar alerta a cada 5 minutos ou se acabou de ser ativado
+        if (agora - ultimoAlertaPeriodico >= 300000 || ultimoAlertaPeriodico == 0) { // 5 minutos = 300000ms
+            if (telaAtual != TipoTela::ALERTA_RACAO_BAIXA && !estaEditando) {
+                DEBUG_ALERTA_PRINTLN("Mostrando alerta periódico");
+                irParaTela(TipoTela::ALERTA_RACAO_BAIXA);
+                ultimoAlertaPeriodico = agora;
+            }
+        }
+
+        // Se estamos na tela de alerta há mais de 10 segundos, voltar para tela inicial
+        static unsigned long inicioTelaAlerta = 0;
+        if (telaAtual == TipoTela::ALERTA_RACAO_BAIXA) {
+            if (inicioTelaAlerta == 0) {
+                inicioTelaAlerta = agora;
+            } else if (agora - inicioTelaAlerta >= 10000) { // 10 segundos
+                irParaTela(TipoTela::INICIO);
+                inicioTelaAlerta = 0;
+            }
+        } else {
+            inicioTelaAlerta = 0;
+        }
+    } else {
+        ultimoAlertaPeriodico = 0;
     }
 }

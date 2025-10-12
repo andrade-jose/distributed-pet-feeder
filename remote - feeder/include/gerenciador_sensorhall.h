@@ -1,24 +1,29 @@
-#ifndef SENSOR_HALL_H
-#define SENSOR_HALL_H
+#ifndef GERENCIADOR_SENSORHALL_H
+#define GERENCIADOR_SENSORHALL_H
 
 #include <Arduino.h>
 
-class SensorHall
-{
+class SensorHall {
+private:
+    int pino;
+    bool estadoAtual;
+    bool estadoAnterior;
+    unsigned long ultimaLeitura;
+    unsigned long contadorDeteccoes;
+    bool detectandoAtualmente;
+    
+    static const unsigned long INTERVALO_LEITURA = 50; // 50ms entre leituras
+
 public:
     SensorHall();
+    
     void iniciar(int pino);
-    void resetar();
-    int obterContagem();
-    bool estaDetectando(); // se ímã está presente agora
-    bool estaConectado();  // ver se pino foi configurado corretamente
-    void verificar();      // chamada no loop() para detectar e contar
-
-private:
-    int pinoSensor;
-    int contador;
-    bool estadoAnterior;
-    bool sensorAtivo;
+    void verificar();
+    bool estaDetectando();
+    bool mudouEstado();
+    unsigned long obterContador();
+    void resetarContador();
+    void testar();
 };
 
 #endif

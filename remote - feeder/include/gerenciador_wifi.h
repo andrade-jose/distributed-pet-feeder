@@ -1,8 +1,8 @@
-#ifndef WIFI_MANAGER_H
-#define WIFI_MANAGER_H
+#ifndef GERENCIADOR_WIFI_H
+#define GERENCIADOR_WIFI_H
 
-#include <Arduino.h>
 #include <WiFi.h>
+#include <Arduino.h>
 
 class WiFiManager {
 private:
@@ -10,15 +10,17 @@ private:
     const char* password;
     bool conectado;
     unsigned long ultimaTentativa;
-    const unsigned long INTERVALO_RECONEXAO = 5000;
+    static const unsigned long INTERVALO_RECONEXAO = 30000; // 30 segundos
 
 public:
     WiFiManager(const char* ssid, const char* password);
+    
     void iniciar();
     bool conectar();
     void verificarConexao();
     bool estaConectado();
     String obterIP();
+    int obterRSSI();
     void desconectar();
 };
 

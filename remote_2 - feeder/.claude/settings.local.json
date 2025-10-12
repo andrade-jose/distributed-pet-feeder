@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Read(//c/Users/ALEXANDRE/Desktop/Projeto Alimentador/distributed-pet-feeder/central-feeder/**)",
+      "Read(//c/Users/ALEXANDRE/Desktop/Projeto Alimentador/distributed-pet-feeder/remote - feeder/**)",
+      "Read(//c/Users/ALEXANDRE/Desktop/Projeto Alimentador/distributed-pet-feeder/remote - feeder/include/**)",
+      "Read(//c/Users/ALEXANDRE/Desktop/Projeto Alimentador/distributed-pet-feeder/remote - feeder/src/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -17,7 +17,7 @@ void GerenciadorTempo::inicializar()
     if (rtc.begin())
     {
         rtcEstaConectado = true;
-        DEBUG_PRINTLN("RTC DS1307 conectado com sucesso");
+    DEBUG_PRINTLN("RTC DS1307 conectado com sucesso");
 
         // Verificar se RTC está rodando
         if (!rtc.isrunning())
@@ -27,17 +27,17 @@ void GerenciadorTempo::inicializar()
             rtc.adjust(DateTime(2025, 8, 1, 12, 0, 0));
         }
 
-        // Ler hora atual do RTC
-        atualizarDoRTC();
+    // Ler hora atual do RTC
+    atualizarDoRTC();
     }
     else
     {
-        rtcEstaConectado = false;
-        DEBUG_PRINTLN("ERRO: RTC DS1307 não encontrado!");
+    rtcEstaConectado = false;
+    DEBUG_PRINTLN("ERRO: RTC DS1307 não encontrado!");
 
-        // Usar hora padrão se RTC não funcionar
-        tempoAtual.hora = 12;
-        tempoAtual.minuto = 0;
+    // Usar hora padrão se RTC não funcionar
+    tempoAtual.hora = 12;
+    tempoAtual.minuto = 0;
         tempoAtual.segundo = 0;
         tempoAtual.dia = 1;
         tempoAtual.mes = 8;
@@ -45,10 +45,10 @@ void GerenciadorTempo::inicializar()
         atualizarDadosTempo(DateTime(2025, 8, 1, 12, 0, 0));
     }
 
-    // Configurar NTP se WiFi disponível
+    // Configurar NTP se WiFi disponÃ­vel
     if (WiFi.status() == WL_CONNECTED && sincronizacaoNtpHabilitada)
     {
-        DEBUG_PRINTLN("WiFi conectado, iniciando sincronização NTP");
+        DEBUG_PRINTLN("WiFi conectado, iniciando sincronizaÃ§Ã£o NTP");
         sincronizarComNTP();
     }
 
@@ -69,7 +69,7 @@ void GerenciadorTempo::atualizar()
         
         atualizarDoRTC();
         
-        // Só notificar se a hora formatada realmente mudou (minutos)
+        // SÃ³ notificar se a hora formatada realmente mudou (minutos)
         if (tempoFormatadoAnterior != tempoAtual.tempoFormatado) {
             notificarAtualizacaoTempo();
         }
@@ -107,7 +107,7 @@ void GerenciadorTempo::definirTempo(int hora, int minuto, int segundo)
 {
     if (!tempoValido(hora, minuto, segundo))
     {
-        DEBUG_PRINTLN("Hora inválida!");
+        DEBUG_PRINTLN("Hora invÃ¡lida!");
         return;
     }
 
@@ -128,7 +128,7 @@ void GerenciadorTempo::definirData(int dia, int mes, int ano)
 {
     if (!dataValida(dia, mes, ano))
     {
-        DEBUG_PRINTLN("Data inválida!");
+        DEBUG_PRINTLN("Data invÃ¡lida!");
         return;
     }
 
@@ -149,7 +149,7 @@ void GerenciadorTempo::definirDataTempo(int dia, int mes, int ano, int hora, int
 {
     if (!dataValida(dia, mes, ano) || !tempoValido(hora, minuto, segundo))
     {
-        DEBUG_PRINTLN("Data/hora inválida!");
+        DEBUG_PRINTLN("Data/hora invÃ¡lida!");
         return;
     }
 
@@ -170,16 +170,16 @@ void GerenciadorTempo::sincronizarComNTP()
 {
     if (WiFi.status() != WL_CONNECTED)
     {
-        DEBUG_PRINTLN("WiFi não conectado, pulando sincronização NTP");
+        DEBUG_PRINTLN("WiFi nÃ£o conectado, pulando sincronizaÃ§Ã£o NTP");
         return;
     }
 
-    DEBUG_PRINTLN("Iniciando sincronização NTP...");
+    DEBUG_PRINTLN("Iniciando sincronizaÃ§Ã£o NTP...");
 
     // Configurar NTP
     configTime(NTP_TIMEZONE_OFFSET * 3600, NTP_DAYLIGHT_OFFSET * 3600, NTP_SERVER);
 
-    // Aguardar sincronização (máximo 10 segundos)
+    // Aguardar sincronizaÃ§Ã£o (mÃ¡ximo 10 segundos)
     struct tm infoTempo;
     int tentativas = 0;
     while (!getLocalTime(&infoTempo) && tentativas < 10)
@@ -238,7 +238,7 @@ bool GerenciadorTempo::precisaSincronizarNTP()
 {
     if (!sincronizacaoNtpHabilitada || ultimaSincronizacaoNTP == 0)
     {
-        return true; // Primeira sincronização
+        return true; // Primeira sincronizaÃ§Ã£o
     }
 
     return (millis() - ultimaSincronizacaoNTP) >= NTP_UPDATE_INTERVAL;
@@ -281,7 +281,7 @@ String GerenciadorTempo::obterStringStatus()
         if (WiFi.status() == WL_CONNECTED)
         {
             unsigned long tempoDesdeSync = (millis() - ultimaSincronizacaoNTP) / 1000 / 60; // minutos
-            status += "NTP: " + String(tempoDesdeSync) + "min atrás";
+            status += "NTP: " + String(tempoDesdeSync) + "min atras";
         }
         else
         {

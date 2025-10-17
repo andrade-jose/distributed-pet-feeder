@@ -1,9 +1,9 @@
 // ========== CONFIGURAÇÕES - EDITE AQUI ==========
 const MQTT_CONFIG = {
-    host: window.MQTT_HOST || 'abc123.s1.eu.hivemq.cloud',
+    host: window.MQTT_HOST || '56d05fe4fbc64e80964aa78d92456f22.s1.eu.hivemq.cloud:8884/mqtt',
     port: window.MQTT_PORT || 8884,
-    username: window.MQTT_USERNAME || 'seu_usuario',
-    password: window.MQTT_PASSWORD || 'sua_senha',
+    username: window.MQTT_USERNAME || 'NewWeb',
+    password: window.MQTT_PASSWORD || 'Senha1234',
     clientId: 'web_feeder_' + Math.random().toString(16).substr(2, 8)
 };
 

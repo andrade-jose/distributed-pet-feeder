@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐾 Alimentador de Pets - Dashboard</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ffa751 0%, #ffe259 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Modal de Login */
+        .login-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .login-form {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .login-form h2 {
+            color: #ff6b35;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-weight: bold;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ffa751;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: #ff6b35;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .login-btn:hover {
+            background: #e55a2b;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .header h1 {
+            color: #ff6b35;
+            font-size: 28px;
+        }
+
+        .header-info {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .status-badge.connected {
+            background: #10b981;
+            color: white;
+        }
+
+        .status-badge.disconnected {
+            background: #ef4444;
+            color: white;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #f0f0f0;
+            padding: 8px 15px;
+            border-radius: 20px;
+        }
+
+        .user-role {
+            font-size: 12px;
+            color: #666;
+            font-weight: bold;
+        }
+
+        .time-display {
+            font-size: 18px;
+            color: #666;
+            font-weight: bold;
+        }
+
+        /* Feeders Grid */
+        .feeders-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .feeder-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+            position: relative;
+        }
+
+        .feeder-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .feeder-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #ffa751;
+        }
+
+        .feeder-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #ff6b35;
+        }
+
+        .feeder-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .feeder-status.online {
+            background: #10b981;
+        }
+
+        .feeder-status.offline {
+            background: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .info-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .info-value {
+            color: #333;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .schedule-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #f0f0f0;
+        }
+
+        .schedule-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #ff6b35;
+            margin-bottom: 10px;
+        }
+
+        .schedule-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .schedule-item input[type="time"] {
+            flex: 1;
+            padding: 8px;
+            border: 2px solid #ffa751;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .schedule-item input[type="number"] {
+            width: 70px;
+            padding: 8px;
+            border: 2px solid #ffa751;
+            border-radius: 5px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .schedule-item button {
+            padding: 8px 12px;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .schedule-item button:hover {
+            background: #059669;
+        }
+
+        .control-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #ff6b35;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #e55a2b;
+        }
+
+        .btn-secondary {
+            background: #ffa751;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #f09641;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .log-section {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+
+        .log-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff6b35;
+            margin-bottom: 15px;
+        }
+
+        .log-container {
+            background: #1e293b;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+        }
+
+        .log-entry.error {
+            color: #ef4444;
+        }
+
+        .log-entry.warning {
+            color: #fbbf24;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 15px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .loading-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 107, 53, 0.3);
+            border-radius: 50%;
+            border-top-color: #ff6b35;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: #10b981;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.error {
+            background: #ef4444;
+        }
+
+        .connection-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .connection-controls button {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+        }
+
+        .logout-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .logout-btn:hover {
+            background: #dc2626;
+        }
+
+        @media (max-width: 768px) {
+            .feeders-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                flex-direction: column;
+            }
+            
+            .header-info {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .control-buttons {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Modal de Login -->
+    <div class="login-modal" id="loginModal">
+        <div class="login-form">
+            <h2>🐾 Acesso ao Dashboard</h2>
+            <div class="form-group">
+                <label for="username">Usuário</label>
+                <input type="text" id="username" placeholder="Digite seu usuário">
+            </div>
+            <div class="form-group">
+                <label for="password">Senha</label>
+                <input type="password" id="password" placeholder="Digite sua senha">
+            </div>
+            <div class="form-group">
+                <label for="role">Tipo de Acesso</label>
+                <select id="role">
+                    <option value="operador">Operador</option>
+                    <option value="dev">Desenvolvedor</option>
+                </select>
+            </div>
+            <button class="login-btn" onclick="login()">Entrar</button>
+        </div>
+    </div>
+
+    <!-- Dashboard Principal -->
+    <div class="container" id="dashboard" style="display: none;">
+        <div class="header">
+            <h1>🐾 Alimentador Automático de Pets</h1>
+            <div class="header-info">
+                <div class="time-display" id="currentTime">--:--:--</div>
+                <div class="user-info">
+                    <span id="userDisplay">Usuário</span>
+                    <span class="user-role" id="userRole">Operador</span>
+                    <button class="logout-btn" onclick="logout()">Sair</button>
+                </div>
+                <span class="status-badge disconnected" id="mqttStatus">● Desconectado</span>
+                <div class="connection-controls">
+                    <button id="connectBtn" class="btn-primary">Conectar</button>
+                    <button id="disconnectBtn" class="btn-secondary" disabled>Desconectar</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="feeders-grid" id="feedersGrid">
+            <!-- Cards dos alimentadores serão inseridos aqui dinamicamente -->
+        </div>
+
+        <div class="log-section">
+            <div class="log-title">📋 Log de Eventos</div>
+            <div class="log-container" id="logContainer">
+                <div class="log-entry">[Sistema] Faça login para acessar o dashboard...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ========== CONFIGURAÇÕES - EDITE AQUI ==========
+        const MQTT_CONFIG = {
+            host: 'abc123.s1.eu.hivemq.cloud',
+            port: 8884,
+            username: 'seu_usuario',
+            password: 'sua_senha',
+            clientId: 'web_feeder_' + Math.random().toString(16).substr(2, 8)
+        };
+
+        // Tópicos MQTT
+        const TOPICS = {
+            command: 'feeder/central/command',
+            schedule: 'feeder/central/schedule',
+            status: 'feeder/remote/+/status',
+            heartbeat: 'feeder/remote/+/heartbeat',
+            feed: 'feeder/remote/+/feed'
+        };
+
+        // Usuários e permissões
+        const USERS = {
+            'operador': { password: 'operador123', role: 'operador' },
+            'dev': { password: 'dev123', role: 'dev' },
+            'admin': { password: 'admin123', role: 'dev' }
+        };
+
+        // ================================================
+
+        // Estado da aplicação
+        let client = null;
+        let currentUser = null;
+        let feedersData = {};
+        let connectionAttempts = 0;
+        const MAX_CONNECTION_ATTEMPTS = 5;
+
+        // Funções de autenticação
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const role = document.getElementById('role').value;
+
+            if (!username || !password) {
+                showToast('Preencha todos os campos', 'error');
+                return;
+            }
+
+            // Verificar credenciais
+            if (USERS[username] && USERS[username].password === password) {
+                // Verificar se o tipo de acesso selecionado corresponde ao usuário
+                if (USERS[username].role !== role) {
+                    showToast('Tipo de acesso não permitido para este usuário', 'error');
+                    return;
+                }
+
+                currentUser = {
+                    username: username,
+                    role: role
+                };
+
+                // Atualizar interface
+                document.getElementById('userDisplay').textContent = username;
+                document.getElementById('userRole').textContent = role === 'dev' ? 'Desenvolvedor' : 'Operador';
+                
+                // Mostrar dashboard e esconder login
+                document.getElementById('loginModal').classList.add('hidden');
+                document.getElementById('dashboard').style.display = 'block';
+                
+                addLog('Sistema', `Usuário ${username} logou como ${role}`);
+                showToast(`Bem-vindo, ${username}!`, 'success');
+
+                // Conectar ao MQTT se for desenvolvedor
+                if (role === 'dev') {
+                    connectMQTT();
+                }
+            } else {
+                showToast('Credenciais inválidas', 'error');
+            }
+        }
+
+        function logout() {
+            if (client && client.connected) {
+                disconnectMQTT();
+            }
+            
+            addLog('Sistema', `Usuário ${currentUser.username} fez logout`);
+            currentUser = null;
+            
+            // Resetar interface
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('role').value = 'operador';
+            
+            // Mostrar login e esconder dashboard
+            document.getElementById('loginModal').classList.remove('hidden');
+            document.getElementById('dashboard').style.display = 'none';
+            
+            // Limpar dados dos alimentadores
+            feedersData = {};
+            document.getElementById('feedersGrid').innerHTML = '';
+            
+            showToast('Logout realizado com sucesso', 'info');
+        }
+
+        // Conectar ao MQTT
+        function connectMQTT() {
+            if (!currentUser || currentUser.role !== 'dev') {
+                showToast('Apenas desenvolvedores podem conectar ao MQTT', 'error');
+                return;
+            }
+
+            if (client && client.connected) {
+                showToast('Já conectado ao MQTT', 'info');
+                return;
+            }
+
+            const url = `wss://${MQTT_CONFIG.host}:${MQTT_CONFIG.port}/mqtt`;
+            
+            addLog('Sistema', `Conectando a ${MQTT_CONFIG.host}...`);
+            updateConnectionButtons(true, false);
+
+            client = mqtt.connect(url, {
+                username: MQTT_CONFIG.username,
+                password: MQTT_CONFIG.password,
+                clientId: MQTT_CONFIG.clientId,
+                reconnectPeriod: 5000,
+                connectTimeout: 10000
+            });
+
+            client.on('connect', () => {
+                addLog('Sistema', '✅ Conectado ao MQTT!');
+                updateMQTTStatus(true);
+                connectionAttempts = 0;
+                updateConnectionButtons(false, true);
+
+                // Assinar tópicos
+                client.subscribe(TOPICS.status.replace('+', '#'));
+                client.subscribe(TOPICS.heartbeat.replace('+', '#'));
+                client.subscribe(TOPICS.feed.replace('+', '#'));
+                
+                addLog('Sistema', '📥 Inscrito nos tópicos de status');
+                
+                // Solicitar status inicial de todas as remotas
+                requestStatusAll();
+                
+                showToast('Conectado ao MQTT com sucesso!', 'success');
+            });
+
+            client.on('message', (topic, message) => {
+                handleMQTTMessage(topic, message.toString());
+            });
+
+            client.on('error', (error) => {
+                addLog('Erro', error.message, 'error');
+                updateMQTTStatus(false);
+                updateConnectionButtons(false, false);
+                
+                connectionAttempts++;
+                if (connectionAttempts >= MAX_CONNECTION_ATTEMPTS) {
+                    showToast(`Falha na conexão após ${MAX_CONNECTION_ATTEMPTS} tentativas`, 'error');
+                }
+            });
+
+            client.on('close', () => {
+                addLog('Sistema', '⚠️ Conexão MQTT fechada', 'warning');
+                updateMQTTStatus(false);
+                updateConnectionButtons(false, false);
+            });
+
+            client.on('reconnect', () => {
+                addLog('Sistema', '🔄 Tentando reconectar...', 'warning');
+            });
+        }
+
+        function disconnectMQTT() {
+            if (client) {
+                client.end();
+                addLog('Sistema', 'Desconectado do MQTT');
+                updateMQTTStatus(false);
+                updateConnectionButtons(false, false);
+                showToast('Desconectado do MQTT', 'info');
+            }
+        }
+
+        function handleMQTTMessage(topic, message) {
+            const parts = topic.split('/');
+            const feederId = parts[2]; // feeder/remote/ID/status
+            const messageType = parts[3];
+
+            // Descoberta automática de novas remotas
+            if (!feedersData[feederId]) {
+                feedersData[feederId] = {
+                    id: feederId,
+                    name: `🐕 Alimentador ${feederId}`,
+                    online: true,
+                    lastFeed: 'Nunca',
+                    lastHeartbeat: new Date(),
+                    schedule: [
+                        { time: '08:00', portion: 50 },
+                        { time: '14:00', portion: 50 },
+                        { time: '20:00', portion: 50 }
+                    ],
+                    autoDiscovered: true
+                };
+                addLog('Descoberta', `Novo alimentador detectado: ${feederId}`);
+                showToast(`Novo alimentador detectado: ${feederId}`, 'success');
+            }
+
+            try {
+                const data = JSON.parse(message);
+
+                switch(messageType) {
+                    case 'status':
+                        feedersData[feederId].online = true;
+                        feedersData[feederId].lastFeed = data.lastFeed || 'Nunca';
+                        feedersData[feederId].servoPosition = data.servoPosition || 0;
+                        feedersData[feederId].hallSensor = data.hallSensor || false;
+                        addLog(feederId, `Status recebido`);
+                        break;
+
+                    case 'heartbeat':
+                        feedersData[feederId].online = true;
+                        feedersData[feederId].lastHeartbeat = new Date();
+                        break;
+
+                    case 'feed':
+                        feedersData[feederId].lastFeed = data.timestamp || new Date().toLocaleString();
+                        addLog(feederId, `🍽️ Alimentação realizada (${data.portion || 50}g)`);
+                        showToast(`${feedersData[feederId].name} foi alimentado!`, 'success');
+                        break;
+                }
+
+                updateFeederCard(feederId);
+            } catch (e) {
+                addLog('Erro', `Falha ao processar mensagem: ${e.message}`, 'error');
+            }
+        }
+
+        function sendCommand(feederId, command, data = {}) {
+            if (!client || !client.connected) {
+                addLog('Erro', 'MQTT desconectado', 'error');
+                showToast('Erro: MQTT desconectado', 'error');
+                return false;
+            }
+
+            if (!currentUser || currentUser.role !== 'dev') {
+                showToast('Apenas desenvolvedores podem enviar comandos', 'error');
+                return false;
+            }
+
+            const payload = JSON.stringify({
+                target: feederId,
+                command: command,
+                data: data,
+                timestamp: new Date().toISOString(),
+                user: currentUser.username
+            });
+
+            client.publish(TOPICS.command, payload);
+            addLog('Comando', `📤 ${command} → ${feederId}`);
+            return true;
+        }
+
+        function feedNow(feederId) {
+            if (sendCommand(feederId, 'FEED_NOW', { portion: 50 })) {
+                showLoading(feederId, true);
+                setTimeout(() => showLoading(feederId, false), 5000);
+            }
+        }
+
+        function testServo(feederId) {
+            if (sendCommand(feederId, 'TEST_SERVO')) {
+                showLoading(feederId, true);
+                setTimeout(() => showLoading(feederId, false), 3000);
+            }
+        }
+
+        function updateSchedule(feederId, scheduleIndex) {
+            const timeInput = document.getElementById(`time-${feederId}-${scheduleIndex}`);
+            const portionInput = document.getElementById(`portion-${feederId}-${scheduleIndex}`);
+
+            // Validação básica
+            if (!timeInput.value) {
+                showToast('Por favor, selecione um horário válido', 'error');
+                return;
+            }
+
+            const portion = parseInt(portionInput.value);
+            if (isNaN(portion) || portion < 10 || portion > 200) {
+                showToast('Porção deve ser entre 10g e 200g', 'error');
+                return;
+            }
+
+            const schedule = {
+                index: scheduleIndex,
+                time: timeInput.value,
+                portion: portion
+            };
+
+            feedersData[feederId].schedule[scheduleIndex] = schedule;
+
+            if (sendCommand(feederId, 'UPDATE_SCHEDULE', schedule)) {
+                addLog(feederId, `⏰ Horário ${scheduleIndex + 1} atualizado: ${schedule.time}`);
+                showToast('Programação atualizada com sucesso!', 'success');
+            }
+        }
+
+        function requestStatusAll() {
+            Object.keys(feedersData).forEach(feederId => {
+                sendCommand(feederId, 'REQUEST_STATUS');
+            });
+        }
+
+        function renderFeeders() {
+            const grid = document.getElementById('feedersGrid');
+            grid.innerHTML = '';
+
+            const feederIds = Object.keys(feedersData);
+            
+            if (feederIds.length === 0) {
+                grid.innerHTML = `
+                    <div class="feeder-card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+                        <h3>Nenhum alimentador detectado</h3>
+                        <p>Conecte-se ao MQTT para descobrir alimentadores automaticamente</p>
+                    </div>
+                `;
+                return;
+            }
+
+            feederIds.forEach(feederId => {
+                const data = feedersData[feederId];
+                
+                const card = document.createElement('div');
+                card.className = 'feeder-card';
+                card.id = `feeder-${feederId}`;
+
+                card.innerHTML = `
+                    <div class="loading-overlay" id="loading-${feederId}">
+                        <div class="spinner"></div>
+                    </div>
+                    <div class="feeder-header">
+                        <span class="feeder-name">${data.name}</span>
+                        <span class="feeder-status ${data.online ? 'online' : 'offline'}"></span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">ID</span>
+                        <span class="info-value">${data.id}</span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">Status</span>
+                        <span class="info-value">${data.online ? '🟢 Online' : '🔴 Offline'}</span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">Última alimentação</span>
+                        <span class="info-value">${data.lastFeed}</span>
+                    </div>
+
+                    ${data.autoDiscovered ? `
+                    <div class="info-row">
+                        <span class="info-label">Descoberta</span>
+                        <span class="info-value">🔄 Automática</span>
+                    </div>
+                    ` : ''}
+
+                    <div class="schedule-section">
+                        <div class="schedule-title">⏰ Programação de Horários</div>
+                        ${data.schedule.map((sched, idx) => `
+                            <div class="schedule-item">
+                                <input type="time" id="time-${feederId}-${idx}" value="${sched.time}" 
+                                    ${currentUser.role !== 'dev' ? 'disabled' : ''}>
+                                <input type="number" id="portion-${feederId}-${idx}" value="${sched.portion}" 
+                                    min="10" max="200" step="10" ${currentUser.role !== 'dev' ? 'disabled' : ''}>
+                                <button onclick="updateSchedule('${feederId}', ${idx})" 
+                                    ${currentUser.role !== 'dev' ? 'disabled' : ''}>💾</button>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <div class="control-buttons">
+                        <button class="btn btn-primary" onclick="feedNow('${feederId}')" 
+                            ${!data.online || currentUser.role !== 'dev' ? 'disabled' : ''}>
+                            🍽️ Alimentar Agora
+                        </button>
+                        <button class="btn btn-secondary" onclick="testServo('${feederId}')" 
+                            ${!data.online || currentUser.role !== 'dev' ? 'disabled' : ''}>
+                            🔧 Testar Servo
+                        </button>
+                    </div>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        function updateFeederCard(feederId) {
+            renderFeeders();
+        }
+
+        function updateMQTTStatus(connected) {
+            const statusEl = document.getElementById('mqttStatus');
+            if (connected) {
+                statusEl.textContent = '● Conectado';
+                statusEl.className = 'status-badge connected';
+            } else {
+                statusEl.textContent = '● Desconectado';
+                statusEl.className = 'status-badge disconnected';
+            }
+        }
+
+        function updateConnectionButtons(connecting, connected) {
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            
+            if (connecting) {
+                connectBtn.disabled = true;
+                connectBtn.textContent = 'Conectando...';
+                disconnectBtn.disabled = true;
+            } else if (connected) {
+                connectBtn.disabled = true;
+                connectBtn.textContent = 'Conectado';
+                disconnectBtn.disabled = false;
+            } else {
+                connectBtn.disabled = false;
+                connectBtn.textContent = 'Conectar';
+                disconnectBtn.disabled = true;
+            }
+        }
+
+        function addLog(source, message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${timestamp}] [${source}] ${message}`;
+            
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // Limitar a 100 linhas
+            while (logContainer.children.length > 100) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type === 'error' ? 'error' : ''}`;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function showLoading(feederId, show) {
+            const loadingEl = document.getElementById(`loading-${feederId}`);
+            if (loadingEl) {
+                loadingEl.classList.toggle('active', show);
+            }
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = now.toLocaleTimeString('pt-BR');
+        }
+
+        // Verificar heartbeat (marcar offline se não receber em 30s)
+        setInterval(() => {
+            const now = new Date();
+            Object.keys(feedersData).forEach(feederId => {
+                const data = feedersData[feederId];
+                if (data.lastHeartbeat) {
+                    const diff = (now - data.lastHeartbeat) / 1000;
+                    if (diff > 30 && data.online) {
+                        data.online = false;
+                        addLog(feederId, '⚠️ Sem heartbeat - marcado como offline', 'warning');
+                        updateFeederCard(feederId);
+                    }
+                }
+            });
+        }, 5000);
+
+        // Permitir login com Enter
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+
+        // Inicialização
+        window.onload = () => {
+            updateClock();
+            setInterval(updateClock, 1000);
+            
+            // Configurar botões de conexão
+            document.getElementById('connectBtn').addEventListener('click', connectMQTT);
+            document.getElementById('disconnectBtn').addEventListener('click', disconnectMQTT);
+        };
+    </script>
+</body>
+</html>

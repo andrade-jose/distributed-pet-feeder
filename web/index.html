@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐾 Alimentador de Pets - Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+    <!-- Modal de Login -->
+    <div class="login-modal" id="loginModal">
+        <div class="login-form">
+            <h2>🐾 Acesso ao Dashboard</h2>
+            <div class="form-group">
+                <label for="username">Usuário</label>
+                <input type="text" id="username" placeholder="Digite seu usuário">
+            </div>
+            <div class="form-group">
+                <label for="password">Senha</label>
+                <input type="password" id="password" placeholder="Digite sua senha">
+            </div>
+            <div class="form-group">
+                <label for="role">Tipo de Acesso</label>
+                <select id="role">
+                    <option value="operador">Operador</option>
+                    <option value="dev">Desenvolvedor</option>
+                </select>
+            </div>
+            <button class="login-btn" onclick="login()">Entrar</button>
+        </div>
+    </div>
+
+    <!-- Dashboard Principal -->
+    <div class="container" id="dashboard" style="display: none;">
+        <div class="header">
+            <h1>🐾 Alimentador Automático de Pets</h1>
+            <div class="header-info">
+                <div class="time-display" id="currentTime">--:--:--</div>
+                <div class="user-info">
+                    <span id="userDisplay">Usuário</span>
+                    <span class="user-role" id="userRole">Operador</span>
+                    <button class="logout-btn" onclick="logout()">Sair</button>
+                </div>
+                <span class="status-badge disconnected" id="mqttStatus">● Desconectado</span>
+                <div class="connection-controls">
+                    <button id="connectBtn" class="btn-primary">Conectar</button>
+                    <button id="disconnectBtn" class="btn-secondary" disabled>Desconectar</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="feeders-grid" id="feedersGrid">
+            <!-- Cards dos alimentadores serão inseridos aqui dinamicamente -->
+        </div>
+
+        <div class="log-section">
+            <div class="log-title">📋 Log de Eventos</div>
+            <div class="log-container" id="logContainer">
+                <div class="log-entry">[Sistema] Faça login para acessar o dashboard...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -2,12 +2,10 @@
 #define GERENCIADOR_ALIMENTACAO_H
 
 #include "gerenciador_servo.h"
-#include "gerenciador_sensorhall.h"
 
 class GerenciadorAlimentacao {
 private:
     ServoControl* servo;
-    SensorHall* sensorHall;
     
     // Variáveis de controle
     int tempoAlimentacaoSegundos;
@@ -21,7 +19,7 @@ private:
     static const unsigned long TEMPO_MOVIMENTO = 2000;
 
 public:
-    GerenciadorAlimentacao(ServoControl* servoPtr, SensorHall* sensorPtr);
+    GerenciadorAlimentacao(ServoControl* servoPtr);
     
     void iniciar(int tempoSegundos);
     void parar();

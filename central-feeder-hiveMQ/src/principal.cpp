@@ -1,35 +1,57 @@
+// principal.cpp
 #include <Arduino.h>
 #include "config.h"
-#include "gerenciador_wifi.h"
+#include "botoes.h"
+#include "display.h"
 #include "gerenciador_tempo.h"
+#include "gerenciador_wifi.h"
 #include "gerenciador_mqtt.h"
+#include "gerenciador_telas.h"
+#include "controlador_alimentacao.h"
+#include "sistema_estado.h"
 
-void setup()
+#define VERSAO SYSTEM_VERSION
+
+// ✅ CORREÇÃO: Usar pointer (declaração consistente)
+extern GerenciadorMQTT* gerenciadorMQTT;
+extern EstadoSistema estadoSistema;
+
+void setup() 
 {
-  Serial.begin(SERIAL_BAUD_RATE);
-  DEBUG_PRINTLN("=== Inicializando Sistema Cliente MQTT ===");
-  DEBUG_PRINTF("Versão: %s\n", SYSTEM_VERSION);
-  DEBUG_PRINTF("Build: %s %s\n", SYSTEM_BUILD_DATE, SYSTEM_BUILD_TIME);
+    Serial.begin(115200);
+    delay(2000);  // Aguarda 2 segundos para estabilizar
+    
+    Serial.println("\n\n========================================");
+    Serial.println("ESP32 INICIADO COM SUCESSO!");
+    Serial.println("========================================");
+    Serial.print("Versao do Firmware: ");
+    Serial.println(__DATE__ " " __TIME__);
+    Serial.println("Iniciando setup...");
+    
+    // Resto do seu código setup aqui...
+    
+    Serial.println("=== Inicializando Sistema Cliente MQTT ===");
+    Serial.printf("Versão: %s\n", VERSAO);
+    Serial.printf("Build: %s %s\n", __DATE__, __TIME__);
 
-  // Inicializar componentes essenciais
-  GerenciadorTempo::inicializar();
-  GerenciadorWifi::inicializar();
-  GerenciadorMQTT::inicializar();
-
-  DEBUG_PRINTLN("Sistema pronto!");
-  DEBUG_PRINTLN("Cliente MQTT conectado ao HiveMQ Cloud");
+    Botoes::inicializar();
+    Display::init();
+    GerenciadorTempo::inicializar();
+    GerenciadorWiFi::inicializar();
+    GerenciadorMQTT::inicializar();  // ✅ Isso cria a instância
+    GerenciadorTelas::inicializar();
+    ControladorAlimentacao::inicializar();
+    
+    Serial.println("Sistema pronto!");
 }
 
-void loop()
-{
-  // Atualizar GerenciadorTempo (RTC + sincronização NTP)
-  GerenciadorTempo::atualizar();
+void loop() {
+    GerenciadorTempo::atualizar();
+    GerenciadorWiFi::atualizar();
+    GerenciadorMQTT::atualizar();
+    estadoSistema.verificarTimeouts();
+    GerenciadorTelas::atualizar();
+    ControladorAlimentacao::atualizar();
 
-  // Atualizar Gerenciador WiFi
-  GerenciadorWifi::atualizar();
-
-  // Atualizar cliente MQTT
-  GerenciadorMQTT::atualizar();
-
-  delay(MAIN_LOOP_DELAY_MS);
+    delay(100);
 }

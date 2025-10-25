@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(cat:*)",
-      "Read(//c/Users/ALEXANDRE/Desktop/Projeto Alimentador/distributed-pet-feeder/central-feeder/**)"
+      "Read(//c/Users/ALEXANDRE/Desktop/Projeto Alimentador/distributed-pet-feeder/central-feeder/**)",
+      "Bash(pio run:*)",
+      "Bash(platformio run:*)"
     ],
     "deny": [],
     "ask": []

@@ -11,7 +11,18 @@
 
 void setup()
 {
-  Serial.begin(SERIAL_BAUD_RATE);
+    Serial.begin(115200);
+    delay(2000);  // Aguarda 2 segundos para estabilizar
+    
+    Serial.println("\n\n========================================");
+    Serial.println("ESP32 INICIADO COM SUCESSO!");
+    Serial.println("========================================");
+    Serial.print("Versao do Firmware: ");
+    Serial.println(__DATE__ " " __TIME__);
+    Serial.println("Iniciando setup...");
+    
+    // Resto do seu código setup aqui...
+
   DEBUG_PRINTLN("=== Inicializando Sistema ===");
   DEBUG_PRINTF("Versão: %s\n", SYSTEM_VERSION);
   DEBUG_PRINTF("Build: %s %s\n", SYSTEM_BUILD_DATE, SYSTEM_BUILD_TIME);

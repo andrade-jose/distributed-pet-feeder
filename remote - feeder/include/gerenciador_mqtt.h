@@ -1,36 +1,48 @@
 #ifndef GERENCIADOR_MQTT_H
 #define GERENCIADOR_MQTT_H
 
-#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include "gerenciador_wifi.h"
+#include "config.h"
 
 // Callback function type
 typedef void (*MQTTCallback)(String topic, String payload);
 
 class MQTTManager {
 private:
-    WiFiClient wifiClient;
+    WiFiClientSecure wifiClient;
     PubSubClient mqttClient;
     WiFiManager* wifiManager;
 
     const char* server;
     int port;
     const char* clientId;
-    
+    const char* username;
+    const char* password;
+
     bool conectado;
     unsigned long ultimaTentativa;
+    unsigned long reconnectDelay;
     MQTTCallback callback;
+
+    // Armazenar tópico para re-subscribe automático
+    String topicoInscrito;
     
-    static const unsigned long INTERVALO_RECONEXAO = 10000; // 10 segundos
+    // Constantes para reconexão
+    static const unsigned long INTERVALO_RECONEXAO = 5000;
+    static const unsigned long MAX_RECONNECT_DELAY = 60000;
+    static const unsigned long INITIAL_RECONNECT_DELAY = 1000;
     
     // Callback estático para PubSubClient
     static void onMQTTMessage(char* topic, byte* payload, unsigned int length);
-    static MQTTManager* instancia; // Para callback estático
+    static MQTTManager* instancia;
+
+    void configurarSSL();
 
 public:
     MQTTManager(WiFiManager* wifiMgr, const char* server, int port,
-                const char* clientId);
+                const char* clientId, const char* username, const char* password);
     
     void iniciar();
     bool conectar();

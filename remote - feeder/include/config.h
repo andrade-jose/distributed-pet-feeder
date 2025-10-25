@@ -1,6 +1,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+// ===== CERTIFICADO SSL - HIVEMQ =====
+extern const char* HIVEMQ_ROOT_CA;
+
 // ===== CONFIGURAÇÃO WIFI =====
 #define DEFAULT_WIFI_SSID "Coelhoandrade"
 #define DEFAULT_WIFI_PASSWORD "190520jg"
@@ -8,11 +11,12 @@
 // ===== CONFIGURAÇÃO DA REMOTA =====
 extern const int REMOTA_ID;
 
-// ===== CONFIGURAÇÃO MQTT =====
-// Broker MQTT Local - Sem SSL na porta 1883
+// ===== CONFIGURAÇÃO MQTT - HIVEMQ =====
 extern const char* MQTT_SERVER;
 extern const int MQTT_PORT;
 extern const char* MQTT_CLIENT_ID;
+extern const char* MQTT_USERNAME;
+extern const char* MQTT_PASSWORD;
 
 // ===== TÓPICOS MQTT =====
 extern const char* TOPIC_COMANDO;
@@ -23,7 +27,6 @@ extern const char* TOPIC_ALERTA_RACAO;
 
 // ===== CONFIGURAÇÃO DO HARDWARE =====
 extern const int PINO_SERVO;
-extern const int PINO_HALL;
 extern const int PINO_BOTAO;
 extern const int PINO_LED_STATUS;
 extern const int PINO_HCSR04_TRIGGER;
@@ -36,6 +39,9 @@ extern const unsigned long INTERVALO_MONITORAMENTO_RACAO;
 // ===== CONFIGURAÇÕES GERAIS =====
 extern const unsigned long SERIAL_BAUD_RATE;
 extern const unsigned long MAIN_LOOP_DELAY;
+
+// ===== CONFIGURAÇÕES DE HEARTBEAT =====
+extern const unsigned long INTERVALO_HEARTBEAT;
 
 // ===== CONFIGURAÇÕES DE DEBUG =====
 #define DEBUG_ENABLED true

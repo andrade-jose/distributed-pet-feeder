@@ -1,8 +1,8 @@
 #include "gerenciador_alimentacao.h"
 #include <Arduino.h>
 
-GerenciadorAlimentacao::GerenciadorAlimentacao(ServoControl* servoPtr, SensorHall* sensorPtr)
-    : servo(servoPtr), sensorHall(sensorPtr), tempoAlimentacaoSegundos(5), 
+GerenciadorAlimentacao::GerenciadorAlimentacao(ServoControl* servoPtr)
+    : servo(servoPtr), tempoAlimentacaoSegundos(5),
       inicioAlimentacao(0), alimentacaoAtiva(false), servoAberto(false),
       ultimoMovimento(0), servoTravado(false), idComandoAtual("") {
 }

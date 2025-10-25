@@ -14,9 +14,9 @@ struct DadosTempo {
     int dia;
     int mes;
     int ano;
-    String tempoFormatado;    // "14:35"
-    String dataFormatada;     // "01/08/2025"
-    String diaSemana;         // "Quinta"
+    String tempoFormatado;
+    String dataFormatada;
+    String diaSemana;
 };
 
 class GerenciadorTempo {
@@ -28,47 +28,38 @@ public:
     static String obterDataFormatada();
     static String obterDataTempoFormatado();
     
-    // ConfiguraÃ§Ã£o manual de hora
     static void definirTempo(int hora, int minuto, int segundo);
     static void definirData(int dia, int mes, int ano);
     static void definirDataTempo(int dia, int mes, int ano, int hora, int minuto, int segundo);
     
-    // SincronizaÃ§Ã£o NTP
+    // ✅ APENAS o método - não a variável
+    static bool rtcEstaConectado();
+
     static void sincronizarComNTP();
     static bool sincronizacaoNTPHabilitada();
     static void habilitarSincronizacaoNTP(bool habilitar);
     static unsigned long obterUltimaSincronizacaoNTP();
     static bool precisaSincronizarNTP();
     
-    // Status
-    static bool rtcConectado();
     static bool tempoValido();
-    static String obterStringStatus();
-    
-    // Callback para notificaÃ§Ã£o de mudanÃ§a
     static void definirCallbackAtualizacaoTempo(void (*callback)(DadosTempo));
     
+    // Métodos públicos de formatação
+    static String formatarDoisDigitos(int valor);
+    static String formatarNumeroComZeros(int valor, int digitos);
+    
 private:
-    // Hardware
     static RTC_DS1307 rtc;
-    
-    // Dados atuais
     static DadosTempo tempoAtual;
-    
-    // Controle de sincronizaÃ§Ã£o
     static unsigned long ultimaSincronizacaoNTP;
     static unsigned long ultimaAtualizacaoTempo;
     static bool sincronizacaoNtpHabilitada;
-    static bool rtcEstaConectado;
-    
-    // Callback
+    static bool _rtcEstaConectado;  // ✅ Variável privada com nome diferente
     static void (*callbackAtualizacaoTempo)(DadosTempo);
     
-    // MÃ©todos privados
     static void atualizarDoRTC();
     static void atualizarDadosTempo(DateTime dt);
     static String obterNomeDiaSemana(int diaSemana);
-    static String formatarDoisDigitos(int valor);
     static void notificarAtualizacaoTempo();
     static bool tempoValido(int hora, int minuto, int segundo);
     static bool dataValida(int dia, int mes, int ano);

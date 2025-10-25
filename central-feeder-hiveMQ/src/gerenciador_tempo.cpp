@@ -1,13 +1,23 @@
 #include "gerenciador_tempo.h"
 
+// ✅ ADICIONAR: Definir constantes se não existirem no config.h
+#ifndef NTP_SYNC_INTERVAL
+#define NTP_SYNC_INTERVAL (2 * 60 * 60 * 1000) // 2 horas em milissegundos
+#endif
+
 // Inicializar variáveis estáticas
 RTC_DS1307 GerenciadorTempo::rtc;
 DadosTempo GerenciadorTempo::tempoAtual;
 unsigned long GerenciadorTempo::ultimaSincronizacaoNTP = 0;
 unsigned long GerenciadorTempo::ultimaAtualizacaoTempo = 0;
 bool GerenciadorTempo::sincronizacaoNtpHabilitada = true;
-bool GerenciadorTempo::rtcEstaConectado = false;
+bool GerenciadorTempo::_rtcEstaConectado = false;
 void (*GerenciadorTempo::callbackAtualizacaoTempo)(DadosTempo) = nullptr;
+
+bool GerenciadorTempo::rtcEstaConectado()
+{
+    return _rtcEstaConectado;
+}
 
 void GerenciadorTempo::inicializar()
 {
@@ -16,28 +26,24 @@ void GerenciadorTempo::inicializar()
     // Inicializar RTC
     if (rtc.begin())
     {
-        rtcEstaConectado = true;
-    DEBUG_PRINTLN("RTC DS1307 conectado com sucesso");
+        _rtcEstaConectado = true;
+        DEBUG_PRINTLN("RTC DS1307 conectado com sucesso");
 
-        // Verificar se RTC está rodando
         if (!rtc.isrunning())
         {
             DEBUG_PRINTLN("RTC não estava rodando, configurando hora atual");
-            // Se não está rodando, definir uma hora padrão
             rtc.adjust(DateTime(2025, 8, 1, 12, 0, 0));
         }
 
-    // Ler hora atual do RTC
-    atualizarDoRTC();
+        atualizarDoRTC();
     }
     else
     {
-    rtcEstaConectado = false;
-    DEBUG_PRINTLN("ERRO: RTC DS1307 não encontrado!");
+        _rtcEstaConectado = false;
+        DEBUG_PRINTLN("ERRO: RTC DS1307 não encontrado!");
 
-    // Usar hora padrão se RTC não funcionar
-    tempoAtual.hora = 12;
-    tempoAtual.minuto = 0;
+        tempoAtual.hora = 12;
+        tempoAtual.minuto = 0;
         tempoAtual.segundo = 0;
         tempoAtual.dia = 1;
         tempoAtual.mes = 8;
@@ -45,10 +51,9 @@ void GerenciadorTempo::inicializar()
         atualizarDadosTempo(DateTime(2025, 8, 1, 12, 0, 0));
     }
 
-    // Configurar NTP se WiFi disponÃ­vel
     if (WiFi.status() == WL_CONNECTED && sincronizacaoNtpHabilitada)
     {
-        DEBUG_PRINTLN("WiFi conectado, iniciando sincronizaÃ§Ã£o NTP");
+        DEBUG_PRINTLN("WiFi conectado, iniciando sincronização NTP");
         sincronizarComNTP();
     }
 
@@ -64,18 +69,15 @@ void GerenciadorTempo::atualizar()
     {
         ultimaAtualizacaoTempo = agora;
         
-        // Salvar a hora formatada anterior
         String tempoFormatadoAnterior = tempoAtual.tempoFormatado;
-        
         atualizarDoRTC();
         
-        // SÃ³ notificar se a hora formatada realmente mudou (minutos)
         if (tempoFormatadoAnterior != tempoAtual.tempoFormatado) {
             notificarAtualizacaoTempo();
         }
     }
 
-    // Verificar se precisa sincronizar com NTP (a cada 2 horas)
+    // Verificar se precisa sincronizar com NTP
     if (sincronizacaoNtpHabilitada && WiFi.status() == WL_CONNECTED && precisaSincronizarNTP())
     {
         DEBUG_PRINTLN("Sincronizando com NTP...");
@@ -107,14 +109,14 @@ void GerenciadorTempo::definirTempo(int hora, int minuto, int segundo)
 {
     if (!tempoValido(hora, minuto, segundo))
     {
-        DEBUG_PRINTLN("Hora invÃ¡lida!");
+        DEBUG_PRINTLN("Hora inválida!");
         return;
     }
 
     DateTime agora = rtc.now();
     DateTime novoTempo(agora.year(), agora.month(), agora.day(), hora, minuto, segundo);
 
-    if (rtcEstaConectado)
+    if (_rtcEstaConectado)
     {
         rtc.adjust(novoTempo);
         DEBUG_PRINTF("Hora definida: %02d:%02d:%02d\n", hora, minuto, segundo);
@@ -128,14 +130,14 @@ void GerenciadorTempo::definirData(int dia, int mes, int ano)
 {
     if (!dataValida(dia, mes, ano))
     {
-        DEBUG_PRINTLN("Data invÃ¡lida!");
+        DEBUG_PRINTLN("Data inválida!");
         return;
     }
 
     DateTime agora = rtc.now();
     DateTime novaDataTempo(ano, mes, dia, agora.hour(), agora.minute(), agora.second());
 
-    if (rtcEstaConectado)
+    if (_rtcEstaConectado)
     {
         rtc.adjust(novaDataTempo);
         DEBUG_PRINTF("Data definida: %02d/%02d/%d\n", dia, mes, ano);
@@ -149,13 +151,13 @@ void GerenciadorTempo::definirDataTempo(int dia, int mes, int ano, int hora, int
 {
     if (!dataValida(dia, mes, ano) || !tempoValido(hora, minuto, segundo))
     {
-        DEBUG_PRINTLN("Data/hora invÃ¡lida!");
+        DEBUG_PRINTLN("Data/hora inválida!");
         return;
     }
 
     DateTime novaDataTempo(ano, mes, dia, hora, minuto, segundo);
 
-    if (rtcEstaConectado)
+    if (_rtcEstaConectado)
     {
         rtc.adjust(novaDataTempo);
         DEBUG_PRINTF("Data/hora definida: %02d/%02d/%d %02d:%02d:%02d\n",
@@ -170,16 +172,14 @@ void GerenciadorTempo::sincronizarComNTP()
 {
     if (WiFi.status() != WL_CONNECTED)
     {
-        DEBUG_PRINTLN("WiFi nÃ£o conectado, pulando sincronizaÃ§Ã£o NTP");
+        DEBUG_PRINTLN("WiFi não conectado, pulando sincronização NTP");
         return;
     }
 
-    DEBUG_PRINTLN("Iniciando sincronizaÃ§Ã£o NTP...");
+    DEBUG_PRINTLN("Iniciando sincronização NTP...");
 
-    // Configurar NTP
     configTime(NTP_TIMEZONE_OFFSET * 3600, NTP_DAYLIGHT_OFFSET * 3600, NTP_SERVER);
 
-    // Aguardar sincronizaÃ§Ã£o (mÃ¡ximo 10 segundos)
     struct tm infoTempo;
     int tentativas = 0;
     while (!getLocalTime(&infoTempo) && tentativas < 10)
@@ -191,7 +191,6 @@ void GerenciadorTempo::sincronizarComNTP()
 
     if (getLocalTime(&infoTempo))
     {
-        // Converter para DateTime e atualizar RTC
         DateTime tempoNtp(infoTempo.tm_year + 1900,
                          infoTempo.tm_mon + 1,
                          infoTempo.tm_mday,
@@ -199,7 +198,7 @@ void GerenciadorTempo::sincronizarComNTP()
                          infoTempo.tm_min,
                          infoTempo.tm_sec);
 
-        if (rtcEstaConectado)
+        if (_rtcEstaConectado)
         {
             rtc.adjust(tempoNtp);
         }
@@ -218,92 +217,28 @@ void GerenciadorTempo::sincronizarComNTP()
     }
 }
 
-bool GerenciadorTempo::sincronizacaoNTPHabilitada()
-{
-    return sincronizacaoNtpHabilitada;
-}
-
-void GerenciadorTempo::habilitarSincronizacaoNTP(bool habilitar)
-{
-    sincronizacaoNtpHabilitada = habilitar;
-    DEBUG_PRINTF("Sincronização NTP %s\n", habilitar ? "habilitada" : "desabilitada");
-}
-
-unsigned long GerenciadorTempo::obterUltimaSincronizacaoNTP()
-{
-    return ultimaSincronizacaoNTP;
-}
-
-bool GerenciadorTempo::precisaSincronizarNTP()
-{
-    if (!sincronizacaoNtpHabilitada || ultimaSincronizacaoNTP == 0)
-    {
-        return true; // Primeira sincronizaÃ§Ã£o
-    }
-
-    return (millis() - ultimaSincronizacaoNTP) >= NTP_UPDATE_INTERVAL;
-}
-
-bool GerenciadorTempo::rtcConectado()
-{
-    return rtcEstaConectado;
-}
-
 bool GerenciadorTempo::tempoValido()
 {
-    return rtcEstaConectado && (tempoAtual.ano >= 2024);
+    return _rtcEstaConectado && (tempoAtual.ano >= 2024);
 }
 
-String GerenciadorTempo::obterStringStatus()
+String GerenciadorTempo::formatarDoisDigitos(int valor)
 {
-    String status = "";
-
-    if (!rtcEstaConectado)
-    {
-        status += "RTC: Desconectado ";
-    }
-    else
-    {
-        status += "RTC: OK ";
-    }
-
-    if (!tempoValido())
-    {
-        status += "Hora: Inválida ";
-    }
-    else
-    {
-        status += "Hora: OK ";
-    }
-
-    if (sincronizacaoNtpHabilitada)
-    {
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            unsigned long tempoDesdeSync = (millis() - ultimaSincronizacaoNTP) / 1000 / 60; // minutos
-            status += "NTP: " + String(tempoDesdeSync) + "min atras";
-        }
-        else
-        {
-            status += "NTP: WiFi desconectado";
-        }
-    }
-    else
-    {
-        status += "NTP: Desabilitado";
-    }
-
-    return status;
+    return (valor < 10) ? "0" + String(valor) : String(valor);
 }
 
-void GerenciadorTempo::definirCallbackAtualizacaoTempo(void (*callback)(DadosTempo))
+String GerenciadorTempo::formatarNumeroComZeros(int valor, int digitos)
 {
-    callbackAtualizacaoTempo = callback;
+    String resultado = String(valor);
+    while (resultado.length() < digitos) {
+        resultado = "0" + resultado;
+    }
+    return resultado;
 }
 
 void GerenciadorTempo::atualizarDoRTC()
 {
-    if (rtcEstaConectado)
+    if (_rtcEstaConectado)
     {
         DateTime agora = rtc.now();
         atualizarDadosTempo(agora);
@@ -319,7 +254,6 @@ void GerenciadorTempo::atualizarDadosTempo(DateTime dt)
     tempoAtual.mes = dt.month();
     tempoAtual.ano = dt.year();
 
-    // Formatar strings - hora apenas com HH:MM (sem segundos)
     tempoAtual.tempoFormatado = formatarDoisDigitos(tempoAtual.hora) + ":" +
                                 formatarDoisDigitos(tempoAtual.minuto);
 
@@ -340,14 +274,8 @@ String GerenciadorTempo::obterNomeDiaSemana(int diaSemana)
     return "Inválido";
 }
 
-String GerenciadorTempo::formatarDoisDigitos(int valor)
-{
-    return (valor < 10) ? "0" + String(valor) : String(valor);
-}
-
 void GerenciadorTempo::notificarAtualizacaoTempo()
 {
-    // Chamar callback personalizado se definido
     if (callbackAtualizacaoTempo)
     {
         callbackAtualizacaoTempo(tempoAtual);
@@ -366,4 +294,25 @@ bool GerenciadorTempo::dataValida(int dia, int mes, int ano)
     return (dia >= 1 && dia <= 31) &&
            (mes >= 1 && mes <= 12) &&
            (ano >= 2024 && ano <= 2099);
+}
+
+bool GerenciadorTempo::sincronizacaoNTPHabilitada() {
+    return sincronizacaoNtpHabilitada;
+}
+
+void GerenciadorTempo::habilitarSincronizacaoNTP(bool habilitar) {
+    sincronizacaoNtpHabilitada = habilitar;
+}
+
+unsigned long GerenciadorTempo::obterUltimaSincronizacaoNTP() {
+    return ultimaSincronizacaoNTP;
+}
+
+bool GerenciadorTempo::precisaSincronizarNTP() {
+    // ✅ CORRIGIDO: Usar a constante definida
+    return (millis() - ultimaSincronizacaoNTP) > NTP_SYNC_INTERVAL;
+}
+
+void GerenciadorTempo::definirCallbackAtualizacaoTempo(void (*callback)(DadosTempo)) {
+    callbackAtualizacaoTempo = callback;
 }

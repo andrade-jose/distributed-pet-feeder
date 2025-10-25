@@ -4,23 +4,42 @@
 MQTTManager* MQTTManager::instancia = nullptr;
 
 MQTTManager::MQTTManager(WiFiManager* wifiMgr, const char* serverParam, int portParam,
-                         const char* clientIdParam)
+                         const char* clientIdParam, const char* usernameParam,
+                         const char* passwordParam)
     : wifiManager(wifiMgr), server(serverParam), port(portParam),
-      clientId(clientIdParam),
-      conectado(false), ultimaTentativa(0), callback(nullptr) {
+      clientId(clientIdParam), username(usernameParam), password(passwordParam),
+      conectado(false), ultimaTentativa(0), reconnectDelay(INITIAL_RECONNECT_DELAY), callback(nullptr), topicoInscrito("") {
 
-    // Configurar cliente MQTT (sem SSL)
+    // Configurar SSL ANTES de setar o cliente
+    configurarSSL();
+
     mqttClient.setClient(wifiClient);
     mqttClient.setServer(server, port);
     mqttClient.setCallback(onMQTTMessage);
+    mqttClient.setKeepAlive(60);  // Aumentar keepalive
+    mqttClient.setBufferSize(2048); // Aumentar buffer
 
     // Definir instância estática para callback
     instancia = this;
 }
 
+void MQTTManager::configurarSSL() {
+    Serial.println("🔐 Configurando SSL...");
+    
+    // ⚡ TLS sem verificação (modo inseguro)
+    wifiClient.setInsecure(); 
+
+    // Timeout
+    wifiClient.setTimeout(15000);
+
+    Serial.println("⚡ TLS/SSL habilitado sem verificação de certificado");
+}
+
+
 void MQTTManager::iniciar() {
-    // Broker MQTT local - sem necessidade de SSL
-    Serial.printf("📬 MQTT Manager iniciado - Broker Local: %s:%d\n", server, port);
+    Serial.printf("📬 MQTT Manager iniciado - HiveMQ: %s:%d\n", server, port);
+    Serial.printf("👤 Usuário: %s\n", username);
+    Serial.printf("🔐 SSL: %s\n", (port == 8883) ? "Habilitado" : "Desabilitado");
 }
 
 bool MQTTManager::conectar() {
@@ -33,17 +52,34 @@ bool MQTTManager::conectar() {
         return true;
     }
     
-    Serial.printf("🔗 Conectando ao broker MQTT local: %s:%d\n", server, port);
-    Serial.printf("👤 Cliente: %s\n", clientId);
+    Serial.printf("🔗 Conectando ao HiveMQ: %s:%d\n", server, port);
+    Serial.printf("👤 Cliente: %s, Usuário: %s\n", clientId, username);
 
-    // Conectar SEM usuário/senha (broker local)
-    if (mqttClient.connect(clientId)) {
+    bool success = mqttClient.connect(clientId, username, password);
+    
+    if (success) {
         conectado = true;
-        Serial.println("✅ MQTT conectado ao broker local!");
+        reconnectDelay = INITIAL_RECONNECT_DELAY; // Reset do delay
+        Serial.println("✅ MQTT conectado ao HiveMQ com SSL!");
         return true;
     } else {
         conectado = false;
-        Serial.printf("❌ Falha MQTT. Estado: %d\n", mqttClient.state());
+        int estado = mqttClient.state();
+        Serial.printf("❌ Falha MQTT. Estado: %d\n", estado);
+        
+        // Debug de estados comuns
+        switch(estado) {
+            case -4: Serial.println("❌ Timeout na conexão"); break;
+            case -2: Serial.println("❌ Falha na conexão de rede"); break;
+            case -1: Serial.println("❌ Servidor não encontrado"); break;
+            case 1: Serial.println("❌ Protocolo não suportado"); break;
+            case 2: Serial.println("❌ Client ID rejeitado"); break;
+            case 3: Serial.println("❌ Servidor indisponível"); break;
+            case 4: Serial.println("❌ Credenciais inválidas"); break;
+            case 5: Serial.println("❌ Não autorizado"); break;
+            default: Serial.println("❌ Erro desconhecido"); break;
+        }
+        
         return false;
     }
 }
@@ -52,12 +88,25 @@ void MQTTManager::verificarConexao() {
     if (!mqttClient.connected()) {
         conectado = false;
         
-        // Tentar reconectar a cada INTERVALO_RECONEXAO
         unsigned long agora = millis();
-        if (agora - ultimaTentativa >= INTERVALO_RECONEXAO) {
+        if (agora - ultimaTentativa >= reconnectDelay) {
             ultimaTentativa = agora;
-            Serial.println("🔄 Tentando reconectar MQTT...");
-            conectar();
+            
+            Serial.printf("🔄 Tentando reconectar MQTT (delay: %lums)...\n", reconnectDelay);
+            
+            if (conectar()) {
+                reconnectDelay = INITIAL_RECONNECT_DELAY; // Reset no sucesso
+
+                // Re-subscribe aos tópicos após reconexão
+                if (!topicoInscrito.isEmpty()) {
+                    Serial.printf("🔄 Re-inscrevendo no tópico: %s\n", topicoInscrito.c_str());
+                    mqttClient.subscribe(topicoInscrito.c_str());
+                }
+            } else {
+                // Backoff exponencial
+                reconnectDelay = min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
+                Serial.printf("⏰ Próxima tentativa em: %lums\n", reconnectDelay);
+            }
         }
     } else {
         conectado = true;
@@ -65,12 +114,12 @@ void MQTTManager::verificarConexao() {
 }
 
 bool MQTTManager::estaConectado() {
-    return mqttClient.connected();
+    return mqttClient.connected() && conectado;
 }
 
 void MQTTManager::loop() {
-    if (mqttClient.connected()) {
-        mqttClient.loop();
+    if (!mqttClient.loop()) {
+        conectado = false;
     }
 }
 
@@ -95,24 +144,27 @@ bool MQTTManager::subscrever(const char* topic) {
         Serial.println("❌ MQTT não conectado - impossível subscrever");
         return false;
     }
-    
+
     bool sucesso = mqttClient.subscribe(topic);
     if (sucesso) {
+        topicoInscrito = String(topic); // Armazena para re-subscribe
         Serial.printf("📥 Subscrito ao tópico: %s\n", topic);
     } else {
         Serial.printf("❌ Falha ao subscrever: %s\n", topic);
     }
-    
+
     return sucesso;
 }
 
 void MQTTManager::definirCallback(MQTTCallback cb) {
     callback = cb;
+    Serial.println("✅ Callback MQTT definido");
 }
 
 void MQTTManager::desconectar() {
     mqttClient.disconnect();
     conectado = false;
+    reconnectDelay = INITIAL_RECONNECT_DELAY;
     Serial.println("📬 MQTT desconectado");
 }
 
@@ -123,7 +175,9 @@ void MQTTManager::onMQTTMessage(char* topic, byte* payload, unsigned int length)
     for (unsigned int i = 0; i < length; i++) {
         payloadStr += (char)payload[i];
     }
+    
     Serial.printf("📥 MQTT recebido [%s]: %s\n", topic, payloadStr.c_str());
+    
     if (instancia && instancia->callback) {
         // Chamar callback da instância
         instancia->callback(String(topic), payloadStr);

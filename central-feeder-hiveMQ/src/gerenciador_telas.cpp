@@ -15,6 +15,7 @@ bool GerenciadorTelas::precisaRedraw = false;
 // Dados das remotas
 int GerenciadorTelas::indiceRemotaAtual = 0;
 int GerenciadorTelas::indiceRefeicaoAtual = 0;
+int GerenciadorTelas::idRemotaBusca = 1;
 
 // Dados do sistema
 bool GerenciadorTelas::luzLcd = true;
@@ -120,6 +121,7 @@ void GerenciadorTelas::renderizar() {
         case TipoTela::CONFIG_ULTIMO_BOOT: renderizarUltimoBooter(); break;
         case TipoTela::CONFIG_RESETAR: renderizarResetar(); break;
         case TipoTela::LISTA_REMOTAS: renderizarListaRemotas(); break;
+        case TipoTela::BUSCAR_REMOTA: renderizarBuscarRemota(); break;
         case TipoTela::REMOTA_ESPECIFICA: renderizarRemotaEspecifica(); break;
         case TipoTela::CONFIG_REFEICAO: renderizarConfigRefeicao(); break;
         case TipoTela::EDITAR_HORA: renderizarEditarHora(); break;
@@ -137,6 +139,7 @@ void GerenciadorTelas::gerenciarNavegacao() {
         case TipoTela::CONFIG_ULTIMO_BOOT: navegarUltimoBooter(); break;
         case TipoTela::CONFIG_RESETAR: navegarResetar(); break;
         case TipoTela::LISTA_REMOTAS: navegarListaRemotas(); break;
+        case TipoTela::BUSCAR_REMOTA: navegarBuscarRemota(); break;
         case TipoTela::REMOTA_ESPECIFICA: navegarRemotaEspecifica(); break;
         case TipoTela::CONFIG_REFEICAO: navegarConfigRefeicao(); break;
         case TipoTela::EDITAR_HORA: navegarEditarHora(); break;
@@ -201,42 +204,42 @@ void GerenciadorTelas::renderizarResetar() {
 }
 
 void GerenciadorTelas::renderizarListaRemotas() {
-    int numConectadas = 0;
-    
-    // Contar remotas conectadas
-    for (int i = 0; i < estadoSistema.numRemotas; i++) {
-        if (estadoSistema.remotaConectada(estadoSistema.remotas[i].id)) {
-            numConectadas++;
-        }
-    }
+    centralizarTexto(0, "Remotas");
 
-    if (numConectadas == 0) {
-        centralizarTexto(1, "Nenhuma remota");
-        centralizarTexto(2, "conectada");
-        Display::setCursor(0, 3);
-        String prefixo = (opcaoSelecionada == 0) ? "> " : "  ";
-        Display::print(prefixo + "Voltar");
-        return;
-    }
-
-    // Mostrar remotas conectadas
-    int linha = 0;
+    // Mostrar até 2 remotas na tela
+    int linha = 1;
     for (int i = 0; i < estadoSistema.numRemotas && linha < 3; i++) {
-        if (estadoSistema.remotaConectada(estadoSistema.remotas[i].id)) {
-            Display::setCursor(0, linha);
-            String prefixo = (linha == opcaoSelecionada) ? "> " : "  ";
-            String nome = "Remota " + String(estadoSistema.remotas[i].id);
-            Display::print(prefixo + nome + ": OK");
-            linha++;
-        }
+        Display::setCursor(0, linha);
+        String prefixo = (i == opcaoSelecionada) ? "> " : "  ";
+        String nome = "Remota " + String(estadoSistema.remotas[i].id);
+        String status = estadoSistema.remotaConectada(estadoSistema.remotas[i].id) ? "OK" : "OFF";
+        Display::print(prefixo + nome + ": " + status);
+        linha++;
     }
 
-    // Opção voltar
-    if (linha < 3) {
+    // Opção Buscar Remota
+    Display::setCursor(0, linha);
+    String prefixo = (opcaoSelecionada == estadoSistema.numRemotas) ? "> " : "  ";
+    Display::print(prefixo + "Buscar Remota");
+    linha++;
+
+    // Opção Voltar
+    if (linha < 4) {
         Display::setCursor(0, linha);
-        String prefixo = (opcaoSelecionada == numConectadas) ? "> " : "  ";
+        prefixo = (opcaoSelecionada == estadoSistema.numRemotas + 1) ? "> " : "  ";
         Display::print(prefixo + "Voltar");
     }
+}
+
+void GerenciadorTelas::renderizarBuscarRemota() {
+    centralizarTexto(0, "Digite o ID:");
+
+    // Mostrar seletor de número (1-6)
+    String display = "       ID: [" + String(idRemotaBusca) + "]";
+    centralizarTexto(2, display);
+
+    // Instruções
+    Display::printAt(0, 3, "CIMA/BAIXO  ENTER=OK");
 }
 
 
@@ -410,17 +413,7 @@ void GerenciadorTelas::navegarResetar() {
 }
 
 void GerenciadorTelas::navegarListaRemotas() {
-    int indicesConectadas[MAX_REMOTAS];
-    int numConectadas = 0;
-    
-    // ✅ CORRIGIDO: Usar estadoSistema
-    for (int i = 0; i < estadoSistema.numRemotas && numConectadas < MAX_REMOTAS; i++) {
-        if (estadoSistema.remotaConectada(estadoSistema.remotas[i].id)) {
-            indicesConectadas[numConectadas++] = i;
-        }
-    }
-
-    int maxOpcoes = numConectadas + 1; // remotas + voltar
+    int maxOpcoes = estadoSistema.numRemotas + 2; // remotas + buscar + voltar
 
     if (Botoes::cimaPressionado()) {
         opcaoSelecionada = (opcaoSelecionada - 1 + maxOpcoes) % maxOpcoes;
@@ -431,12 +424,54 @@ void GerenciadorTelas::navegarListaRemotas() {
         precisaRedraw = true;
     }
     else if (Botoes::enterPressionado()) {
-        if (opcaoSelecionada < numConectadas) {
-            // ✅ CORRIGIDO: Usar indiceRemotaAtual
-            indiceRemotaAtual = indicesConectadas[opcaoSelecionada];
+        if (opcaoSelecionada < estadoSistema.numRemotas) {
+            // Selecionou uma remota diretamente
+            indiceRemotaAtual = opcaoSelecionada;
             irParaTela(TipoTela::REMOTA_ESPECIFICA);
+        } else if (opcaoSelecionada == estadoSistema.numRemotas) {
+            // Selecionou "Buscar Remota"
+            idRemotaBusca = 1; // Resetar para ID 1
+            irParaTela(TipoTela::BUSCAR_REMOTA);
         } else {
+            // Selecionou "Voltar"
             irParaTela(TipoTela::INICIO);
+        }
+    }
+}
+
+void GerenciadorTelas::navegarBuscarRemota() {
+    if (Botoes::cimaPressionado()) {
+        idRemotaBusca = (idRemotaBusca % MAX_REMOTAS) + 1; // Cicla de 1 a 6
+        precisaRedraw = true;
+    }
+    else if (Botoes::baixoPressionado()) {
+        idRemotaBusca = ((idRemotaBusca - 2 + MAX_REMOTAS) % MAX_REMOTAS) + 1; // Cicla de 6 a 1
+        precisaRedraw = true;
+    }
+    else if (Botoes::enterPressionado()) {
+        // Buscar a remota pelo ID
+        bool encontrada = false;
+        for (int i = 0; i < estadoSistema.numRemotas; i++) {
+            if (estadoSistema.remotas[i].id == idRemotaBusca) {
+                indiceRemotaAtual = i;
+                encontrada = true;
+                irParaTela(TipoTela::REMOTA_ESPECIFICA);
+                break;
+            }
+        }
+
+        if (!encontrada) {
+            // Se não encontrou, criar a remota automaticamente
+            estadoSistema.adicionarRemota(idRemotaBusca);
+            // Encontrar o índice da remota recém-adicionada
+            for (int i = 0; i < estadoSistema.numRemotas; i++) {
+                if (estadoSistema.remotas[i].id == idRemotaBusca) {
+                    indiceRemotaAtual = i;
+                    break;
+                }
+            }
+            estadoSistema.salvarConfiguracao();
+            irParaTela(TipoTela::REMOTA_ESPECIFICA);
         }
     }
 }

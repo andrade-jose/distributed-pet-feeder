@@ -37,6 +37,7 @@ function login() {
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
     const role = document.getElementById('role').value;
+    const rememberPassword = document.getElementById('rememberPassword').checked;
 
     if (!username || !password) {
         showToast('Preencha todos os campos', 'error');
@@ -56,14 +57,33 @@ function login() {
             role: role
         };
 
+        // Salvar credenciais se "Lembrar senha" estiver marcado
+        if (rememberPassword) {
+            localStorage.setItem('savedUsername', username);
+            localStorage.setItem('savedPassword', password);
+            localStorage.setItem('savedRole', role);
+        } else {
+            // Limpar credenciais salvas
+            localStorage.removeItem('savedUsername');
+            localStorage.removeItem('savedPassword');
+            localStorage.removeItem('savedRole');
+        }
+
         // Atualizar interface
         document.getElementById('userDisplay').textContent = username;
         document.getElementById('userRole').textContent = role === 'dev' ? 'Desenvolvedor' : 'Operador';
-        
+
         // Mostrar dashboard e esconder login
         document.getElementById('loginModal').classList.add('hidden');
         document.getElementById('dashboard').style.display = 'block';
-        
+
+        // Mostrar seção MQTT manual se for desenvolvedor
+        if (role === 'dev') {
+            document.getElementById('mqttManualSection').style.display = 'block';
+        } else {
+            document.getElementById('mqttManualSection').style.display = 'none';
+        }
+
         addLog('Sistema', `Usuário ${username} logou como ${role}`);
         showToast(`Bem-vindo, ${username}!`, 'success');
 
@@ -73,6 +93,20 @@ function login() {
         }
     } else {
         showToast('Credenciais inválidas', 'error');
+    }
+}
+
+// Carregar credenciais salvas ao iniciar
+function loadSavedCredentials() {
+    const savedUsername = localStorage.getItem('savedUsername');
+    const savedPassword = localStorage.getItem('savedPassword');
+    const savedRole = localStorage.getItem('savedRole');
+
+    if (savedUsername && savedPassword && savedRole) {
+        document.getElementById('username').value = savedUsername;
+        document.getElementById('password').value = savedPassword;
+        document.getElementById('role').value = savedRole;
+        document.getElementById('rememberPassword').checked = true;
     }
 }
 
@@ -483,6 +517,113 @@ setInterval(() => {
     });
 }, 5000);
 
+// Funções para envio manual de mensagens MQTT
+function sendManualMQTT() {
+    if (!client || !client.connected) {
+        showToast('Erro: MQTT desconectado', 'error');
+        return;
+    }
+
+    if (!currentUser || currentUser.role !== 'dev') {
+        showToast('Apenas desenvolvedores podem enviar mensagens manuais', 'error');
+        return;
+    }
+
+    const topic = document.getElementById('mqttTopic').value.trim();
+    const messageText = document.getElementById('mqttMessage').value.trim();
+
+    if (!topic) {
+        showToast('Por favor, informe o tópico MQTT', 'error');
+        return;
+    }
+
+    if (!messageText) {
+        showToast('Por favor, informe a mensagem', 'error');
+        return;
+    }
+
+    // Validar JSON
+    try {
+        JSON.parse(messageText);
+    } catch (e) {
+        showToast('Erro: A mensagem deve ser um JSON válido', 'error');
+        return;
+    }
+
+    // Enviar mensagem
+    try {
+        client.publish(topic, messageText);
+        addLog('Manual', `📤 Enviado para ${topic}: ${messageText.substring(0, 50)}...`);
+        showToast('Mensagem enviada com sucesso!', 'success');
+    } catch (error) {
+        addLog('Erro', `Falha ao enviar mensagem: ${error.message}`, 'error');
+        showToast('Erro ao enviar mensagem', 'error');
+    }
+}
+
+function clearManualMQTT() {
+    document.getElementById('mqttMessage').value = '';
+    showToast('Campos limpos', 'info');
+}
+
+function loadTemplate(type) {
+    const topicInput = document.getElementById('mqttTopic');
+    const messageInput = document.getElementById('mqttMessage');
+
+    const templates = {
+        feed: {
+            topic: 'feeder/central/command',
+            message: {
+                target: '001',
+                command: 'FEED_NOW',
+                data: { portion: 50 },
+                timestamp: new Date().toISOString(),
+                user: currentUser ? currentUser.username : 'dev'
+            }
+        },
+        status: {
+            topic: 'feeder/central/command',
+            message: {
+                target: '001',
+                command: 'REQUEST_STATUS',
+                data: {},
+                timestamp: new Date().toISOString(),
+                user: currentUser ? currentUser.username : 'dev'
+            }
+        },
+        servo: {
+            topic: 'feeder/central/command',
+            message: {
+                target: '001',
+                command: 'TEST_SERVO',
+                data: {},
+                timestamp: new Date().toISOString(),
+                user: currentUser ? currentUser.username : 'dev'
+            }
+        },
+        schedule: {
+            topic: 'feeder/central/command',
+            message: {
+                target: '001',
+                command: 'UPDATE_SCHEDULE',
+                data: {
+                    index: 0,
+                    time: '08:00',
+                    portion: 50
+                },
+                timestamp: new Date().toISOString(),
+                user: currentUser ? currentUser.username : 'dev'
+            }
+        }
+    };
+
+    if (templates[type]) {
+        topicInput.value = templates[type].topic;
+        messageInput.value = JSON.stringify(templates[type].message, null, 2);
+        showToast(`Template "${type}" carregado!`, 'info');
+    }
+}
+
 // Permitir login com Enter
 document.getElementById('password').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
@@ -494,8 +635,11 @@ document.getElementById('password').addEventListener('keypress', function(e) {
 window.onload = () => {
     updateClock();
     setInterval(updateClock, 1000);
-    
+
     // Configurar botões de conexão
     document.getElementById('connectBtn').addEventListener('click', connectMQTT);
     document.getElementById('disconnectBtn').addEventListener('click', disconnectMQTT);
+
+    // Carregar credenciais salvas
+    loadSavedCredentials();
 };

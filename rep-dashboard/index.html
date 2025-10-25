@@ -27,6 +27,12 @@
                     <option value="dev">Desenvolvedor</option>
                 </select>
             </div>
+            <div class="form-group remember-password">
+                <label>
+                    <input type="checkbox" id="rememberPassword">
+                    Lembrar senha
+                </label>
+            </div>
             <button class="login-btn" onclick="login()">Entrar</button>
         </div>
     </div>
@@ -52,6 +58,38 @@
 
         <div class="feeders-grid" id="feedersGrid">
             <!-- Cards dos alimentadores serão inseridos aqui dinamicamente -->
+        </div>
+
+        <!-- Seção de Envio Manual de Mensagens MQTT (apenas para devs) -->
+        <div class="mqtt-manual-section" id="mqttManualSection" style="display: none;">
+            <div class="mqtt-manual-title">📤 Envio Manual de Mensagens MQTT</div>
+            <div class="mqtt-manual-content">
+                <div class="mqtt-manual-form">
+                    <div class="form-row">
+                        <div class="form-group-inline">
+                            <label for="mqttTopic">Tópico MQTT</label>
+                            <input type="text" id="mqttTopic" placeholder="Ex: feeder/central/command" value="feeder/central/command">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group-inline full-width">
+                            <label for="mqttMessage">Mensagem (JSON)</label>
+                            <textarea id="mqttMessage" rows="5" placeholder='{"target": "001", "command": "FEED_NOW", "data": {"portion": 50}}'></textarea>
+                        </div>
+                    </div>
+                    <div class="mqtt-manual-buttons">
+                        <button class="btn btn-primary" onclick="sendManualMQTT()">📤 Enviar Mensagem</button>
+                        <button class="btn btn-secondary" onclick="clearManualMQTT()">🗑️ Limpar</button>
+                    </div>
+                    <div class="mqtt-templates">
+                        <label>Templates Rápidos:</label>
+                        <button class="template-btn" onclick="loadTemplate('feed')">Alimentar Agora</button>
+                        <button class="template-btn" onclick="loadTemplate('status')">Solicitar Status</button>
+                        <button class="template-btn" onclick="loadTemplate('servo')">Testar Servo</button>
+                        <button class="template-btn" onclick="loadTemplate('schedule')">Atualizar Horário</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="log-section">

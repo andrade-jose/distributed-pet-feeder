@@ -14,6 +14,7 @@ enum class TipoTela {
     CONFIG_ULTIMO_BOOT,
     CONFIG_RESETAR,
     LISTA_REMOTAS,
+    BUSCAR_REMOTA,
     REMOTA_ESPECIFICA,
     CONFIG_REFEICAO,
     EDITAR_HORA,
@@ -45,6 +46,7 @@ private:
     // Dados das remotas
     static int indiceRemotaAtual; // índice no estadoSistema.remotas[]
     static int indiceRefeicaoAtual;
+    static int idRemotaBusca; // ID da remota sendo buscada (1-6)
 
 
     // Controle de tempo
@@ -72,6 +74,7 @@ private:
     static void renderizarUltimoBooter();
     static void renderizarResetar();
     static void renderizarListaRemotas();
+    static void renderizarBuscarRemota();
     static void renderizarRemotaEspecifica();
     static void renderizarConfigRefeicao();
     static void renderizarEditarHora();
@@ -85,6 +88,7 @@ private:
     static void navegarUltimoBooter();
     static void navegarResetar();
     static void navegarListaRemotas();
+    static void navegarBuscarRemota();
     static void navegarRemotaEspecifica();
     static void navegarConfigRefeicao();
     static void navegarEditarHora();

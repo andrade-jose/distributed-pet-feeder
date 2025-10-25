@@ -438,6 +438,123 @@ body {
     background: #dc2626;
 }
 
+/* Seção MQTT Manual */
+.mqtt-manual-section {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+}
+
+.mqtt-manual-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #ff6b35;
+    margin-bottom: 15px;
+}
+
+.mqtt-manual-content {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+}
+
+.mqtt-manual-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.form-row {
+    display: flex;
+    gap: 15px;
+}
+
+.form-group-inline {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.form-group-inline.full-width {
+    width: 100%;
+}
+
+.form-group-inline label {
+    font-weight: bold;
+    color: #666;
+    font-size: 14px;
+}
+
+.form-group-inline input[type="text"],
+.form-group-inline textarea {
+    padding: 10px;
+    border: 2px solid #ffa751;
+    border-radius: 5px;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+}
+
+.form-group-inline textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.mqtt-manual-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.mqtt-templates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 2px solid #e0e0e0;
+}
+
+.mqtt-templates label {
+    font-weight: bold;
+    color: #666;
+    font-size: 14px;
+}
+
+.template-btn {
+    padding: 6px 12px;
+    background: #e0e0e0;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    transition: background 0.3s;
+}
+
+.template-btn:hover {
+    background: #c0c0c0;
+}
+
+.remember-password {
+    display: flex;
+    align-items: center;
+}
+
+.remember-password label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.remember-password input[type="checkbox"] {
+    width: auto;
+    cursor: pointer;
+}
+
 @media (max-width: 768px) {
     .feeders-grid {
         grid-template-columns: 1fr;

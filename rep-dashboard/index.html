@@ -68,13 +68,13 @@
                     <div class="form-row">
                         <div class="form-group-inline">
                             <label for="mqttTopic">Tópico MQTT</label>
-                            <input type="text" id="mqttTopic" placeholder="Ex: feeder/central/command" value="feeder/central/command">
+                            <input type="text" id="mqttTopic" placeholder="Ex: alimentador/remota/comando" value="alimentador/remota/comando">
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group-inline full-width">
-                            <label for="mqttMessage">Mensagem (JSON)</label>
-                            <textarea id="mqttMessage" rows="5" placeholder='{"target": "001", "command": "FEED_NOW", "data": {"portion": 50}}'></textarea>
+                            <label for="mqttMessage">Mensagem (JSON ou Texto)</label>
+                            <textarea id="mqttMessage" rows="5" placeholder='{"acao":"alimentar","tempo":5,"remota_id":1} ou STATUS ou PING'></textarea>
                         </div>
                     </div>
                     <div class="mqtt-manual-buttons">

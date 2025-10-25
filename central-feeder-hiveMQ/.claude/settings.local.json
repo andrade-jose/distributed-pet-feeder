@@ -9,7 +9,8 @@
       "Read(//c/Users/ALEXANDRE/Desktop/Projeto Alimentador/distributed-pet-feeder/remote - feeder/include/**)",
       "Read(//c/Users/ALEXANDRE/OneDrive/Área de Trabalho/Projeto Alimentador/distributed-pet-feeder/central-feeder/**)",
       "Bash(~/.platformio/penv/Scripts/platformio device monitor --port COM5 --baud 115200)",
-      "Bash(~/.platformio/penv/Scripts/platformio run --environment esp32dev)"
+      "Bash(~/.platformio/penv/Scripts/platformio run --environment esp32dev)",
+      "Bash(~/.platformio/penv/Scripts/platformio run --target upload --environment esp32dev --upload-port COM5)"
     ],
     "deny": [],
     "ask": []

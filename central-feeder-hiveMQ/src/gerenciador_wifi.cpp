@@ -22,27 +22,35 @@ bool GerenciadorWiFi::redesCriptografadas[20];
 
 void GerenciadorWiFi::inicializar() {
     Serial.println("=== Inicializando Gerenciador WiFi ===");
-    
+
     // Configurar modo WiFi
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
-    
+
     // Registrar evento
     WiFi.onEvent(GerenciadorWiFi::aoEventoWiFi);
-    
+
     // Carregar credenciais salvas
-    GerenciadorWiFi::carregarCredenciais();
-    
+    bool credenciaisSalvas = GerenciadorWiFi::carregarCredenciais();
+
+    // Se não houver credenciais salvas, usar as padrão do config.h
+    if (!credenciaisSalvas || GerenciadorWiFi::senhaSalva.isEmpty()) {
+        Serial.println("Usando credenciais padrão do config.h");
+        GerenciadorWiFi::ssidSalvo = DEFAULT_WIFI_SSID;
+        GerenciadorWiFi::senhaSalva = DEFAULT_WIFI_PASSWORD;
+        GerenciadorWiFi::salvarCredenciais(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASSWORD);
+    }
+
     // Tentar conectar automaticamente se tiver credenciais
-    if (GerenciadorWiFi::reconexaoAutomatica && 
-        !GerenciadorWiFi::ssidSalvo.isEmpty() && 
+    if (GerenciadorWiFi::reconexaoAutomatica &&
+        !GerenciadorWiFi::ssidSalvo.isEmpty() &&
         !GerenciadorWiFi::senhaSalva.isEmpty()) {
-        
+
         Serial.println("Tentando conectar automaticamente...");
         Serial.println("Conectando ao WiFi: " + GerenciadorWiFi::ssidSalvo);
         GerenciadorWiFi::conectar(GerenciadorWiFi::ssidSalvo, GerenciadorWiFi::senhaSalva);
     }
-    
+
     Serial.println("Gerenciador WiFi inicializado");
 }
 

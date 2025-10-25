@@ -7,13 +7,13 @@ const MQTT_CONFIG = {
     clientId: 'web_feeder_' + Math.random().toString(16).substr(2, 8)
 };
 
-// Tópicos MQTT
+// Tópicos MQTT - Compatíveis com a Remota ESP32
 const TOPICS = {
-    command: 'feeder/central/command',
-    schedule: 'feeder/central/schedule',
-    status: 'feeder/remote/+/status',
-    heartbeat: 'feeder/remote/+/heartbeat',
-    feed: 'feeder/remote/+/feed'
+    command: 'alimentador/remota/comando',      // Tópico que a remota escuta
+    status: 'alimentador/remota/status',        // Status da remota
+    heartbeat: 'alimentador/remota/heartbeat',  // Heartbeat da remota
+    resposta: 'alimentador/remota/resposta',    // Respostas da remota
+    alerta_racao: 'alimentador/remota/alerta_racao' // Alertas de nível de ração
 };
 
 // Usuários e permissões
@@ -165,16 +165,17 @@ function connectMQTT() {
         connectionAttempts = 0;
         updateConnectionButtons(false, true);
 
-        // Assinar tópicos
-        client.subscribe(TOPICS.status.replace('+', '#'));
-        client.subscribe(TOPICS.heartbeat.replace('+', '#'));
-        client.subscribe(TOPICS.feed.replace('+', '#'));
-        
-        addLog('Sistema', '📥 Inscrito nos tópicos de status');
-        
-        // Solicitar status inicial de todas as remotas
+        // Assinar tópicos da remota
+        client.subscribe(TOPICS.status);
+        client.subscribe(TOPICS.heartbeat);
+        client.subscribe(TOPICS.resposta);
+        client.subscribe(TOPICS.alerta_racao);
+
+        addLog('Sistema', '📥 Inscrito nos tópicos: status, heartbeat, resposta, alerta_racao');
+
+        // Solicitar status inicial
         requestStatusAll();
-        
+
         showToast('Conectado ao MQTT com sucesso!', 'success');
     });
 
@@ -215,15 +216,18 @@ function disconnectMQTT() {
 }
 
 function handleMQTTMessage(topic, message) {
+    // Tópicos: alimentador/remota/status, alimentador/remota/heartbeat, etc.
     const parts = topic.split('/');
-    const feederId = parts[2]; // feeder/remote/ID/status
-    const messageType = parts[3];
+    const messageType = parts[2]; // status, heartbeat, resposta, alerta_racao
 
-    // Descoberta automática de novas remotas
+    // ID fixo da remota (por enquanto apenas uma)
+    const feederId = '001';
+
+    // Descoberta automática da remota
     if (!feedersData[feederId]) {
         feedersData[feederId] = {
             id: feederId,
-            name: `🐕 Alimentador ${feederId}`,
+            name: `🐕 Alimentador Remoto ${feederId}`,
             online: true,
             lastFeed: 'Nunca',
             lastHeartbeat: new Date(),
@@ -234,37 +238,61 @@ function handleMQTTMessage(topic, message) {
             ],
             autoDiscovered: true
         };
-        addLog('Descoberta', `Novo alimentador detectado: ${feederId}`);
-        showToast(`Novo alimentador detectado: ${feederId}`, 'success');
+        addLog('Descoberta', `Alimentador remoto detectado: ${feederId}`);
+        showToast(`Alimentador remoto detectado!`, 'success');
+        renderFeeders();
     }
 
     try {
-        const data = JSON.parse(message);
+        // Tentar parsear como JSON, se falhar, usar como texto
+        let data;
+        try {
+            data = JSON.parse(message);
+        } catch {
+            data = { message: message };
+        }
 
         switch(messageType) {
             case 'status':
                 feedersData[feederId].online = true;
-                feedersData[feederId].lastFeed = data.lastFeed || 'Nunca';
-                feedersData[feederId].servoPosition = data.servoPosition || 0;
-                feedersData[feederId].hallSensor = data.hallSensor || false;
-                addLog(feederId, `Status recebido`);
+                feedersData[feederId].lastHeartbeat = new Date();
+                if (data.lastFeed) {
+                    feedersData[feederId].lastFeed = data.lastFeed;
+                }
+                addLog(feederId, `📊 Status recebido`);
                 break;
 
             case 'heartbeat':
                 feedersData[feederId].online = true;
                 feedersData[feederId].lastHeartbeat = new Date();
+                addLog(feederId, `💓 Heartbeat recebido`);
                 break;
 
-            case 'feed':
-                feedersData[feederId].lastFeed = data.timestamp || new Date().toLocaleString();
-                addLog(feederId, `🍽️ Alimentação realizada (${data.portion || 50}g)`);
-                showToast(`${feedersData[feederId].name} foi alimentado!`, 'success');
+            case 'resposta':
+                feedersData[feederId].online = true;
+                feedersData[feederId].lastHeartbeat = new Date();
+                addLog(feederId, `📥 Resposta: ${message}`);
+
+                // Se for resposta de alimentação
+                if (data.comando === 'ALIMENTAR' || data.action === 'feed') {
+                    feedersData[feederId].lastFeed = new Date().toLocaleString('pt-BR');
+                    showToast(`Alimentação realizada com sucesso!`, 'success');
+                }
                 break;
+
+            case 'alerta_racao':
+                feedersData[feederId].online = true;
+                addLog(feederId, `⚠️ Alerta: ${message}`, 'warning');
+                showToast(`Atenção: Nível de ração baixo!`, 'error');
+                break;
+
+            default:
+                addLog('MQTT', `Tópico desconhecido: ${topic}`, 'warning');
         }
 
         updateFeederCard(feederId);
     } catch (e) {
-        addLog('Erro', `Falha ao processar mensagem: ${e.message}`, 'error');
+        addLog('Erro', `Falha ao processar mensagem [${topic}]: ${e.message}`, 'error');
     }
 }
 
@@ -280,16 +308,49 @@ function sendCommand(feederId, command, data = {}) {
         return false;
     }
 
-    const payload = JSON.stringify({
-        target: feederId,
-        command: command,
-        data: data,
-        timestamp: new Date().toISOString(),
-        user: currentUser.username
-    });
+    let payload;
+
+    // Mapear comandos para formato esperado pela remota
+    switch(command) {
+        case 'FEED_NOW':
+            // Formato: {"acao":"alimentar","tempo":5,"remota_id":1}
+            payload = JSON.stringify({
+                acao: "alimentar",
+                tempo: data.portion ? Math.round(data.portion / 10) : 5, // Converte gramas para segundos (50g = 5s)
+                remota_id: parseInt(feederId)
+            });
+            break;
+
+        case 'TEST_SERVO':
+            // Usar comando legado: a3 (3 segundos)
+            payload = "a3";
+            break;
+
+        case 'REQUEST_STATUS':
+            payload = "STATUS";
+            break;
+
+        case 'UPDATE_SCHEDULE':
+            // Por enquanto não implementado na remota
+            addLog('Aviso', 'Atualização de horário não suportada pela remota', 'warning');
+            showToast('Função não disponível na remota', 'error');
+            return false;
+
+        case 'STOP':
+            payload = "STOP";
+            break;
+
+        case 'PING':
+            payload = "PING";
+            break;
+
+        default:
+            addLog('Erro', `Comando desconhecido: ${command}`, 'error');
+            return false;
+    }
 
     client.publish(TOPICS.command, payload);
-    addLog('Comando', `📤 ${command} → ${feederId}`);
+    addLog('Comando', `📤 ${command} enviado para remota ${feederId}`);
     return true;
 }
 
@@ -542,12 +603,14 @@ function sendManualMQTT() {
         return;
     }
 
-    // Validar JSON
-    try {
-        JSON.parse(messageText);
-    } catch (e) {
-        showToast('Erro: A mensagem deve ser um JSON válido', 'error');
-        return;
+    // Validar JSON se parecer ser JSON (começa com { ou [)
+    if (messageText.startsWith('{') || messageText.startsWith('[')) {
+        try {
+            JSON.parse(messageText);
+        } catch (e) {
+            showToast('Erro: Mensagem JSON inválida', 'error');
+            return;
+        }
     }
 
     // Enviar mensagem
@@ -572,54 +635,42 @@ function loadTemplate(type) {
 
     const templates = {
         feed: {
-            topic: 'feeder/central/command',
+            topic: 'alimentador/remota/comando',
             message: {
-                target: '001',
-                command: 'FEED_NOW',
-                data: { portion: 50 },
-                timestamp: new Date().toISOString(),
-                user: currentUser ? currentUser.username : 'dev'
+                acao: "alimentar",
+                tempo: 5,
+                remota_id: 1
             }
         },
         status: {
-            topic: 'feeder/central/command',
-            message: {
-                target: '001',
-                command: 'REQUEST_STATUS',
-                data: {},
-                timestamp: new Date().toISOString(),
-                user: currentUser ? currentUser.username : 'dev'
-            }
+            topic: 'alimentador/remota/comando',
+            message: "STATUS"
         },
         servo: {
-            topic: 'feeder/central/command',
-            message: {
-                target: '001',
-                command: 'TEST_SERVO',
-                data: {},
-                timestamp: new Date().toISOString(),
-                user: currentUser ? currentUser.username : 'dev'
-            }
+            topic: 'alimentador/remota/comando',
+            message: "a3"
         },
         schedule: {
-            topic: 'feeder/central/command',
+            topic: 'alimentador/remota/comando',
             message: {
-                target: '001',
-                command: 'UPDATE_SCHEDULE',
-                data: {
-                    index: 0,
-                    time: '08:00',
-                    portion: 50
-                },
-                timestamp: new Date().toISOString(),
-                user: currentUser ? currentUser.username : 'dev'
+                info: "Programação de horários não implementada na remota",
+                nota: "Use o sistema central para programação"
             }
+        },
+        ping: {
+            topic: 'alimentador/remota/comando',
+            message: "PING"
+        },
+        stop: {
+            topic: 'alimentador/remota/comando',
+            message: "STOP"
         }
     };
 
     if (templates[type]) {
         topicInput.value = templates[type].topic;
-        messageInput.value = JSON.stringify(templates[type].message, null, 2);
+        const msg = templates[type].message;
+        messageInput.value = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2);
         showToast(`Template "${type}" carregado!`, 'info');
     }
 }

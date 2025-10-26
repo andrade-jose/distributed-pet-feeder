@@ -7,6 +7,20 @@ Precisamos configurá-lo como **Web Service** para executar o servidor Node.js e
 
 ---
 
+## ⚡ RESUMO RÁPIDO
+
+1. **Deletar** o serviço atual (Static Site)
+2. Criar **novo Web Service** conectado ao repositório `distributed-pet-feeder`
+3. Configurar:
+   - Build Command: `npm install`
+   - Start Command: `npm start`
+   - Instance Type: **Free**
+4. Adicionar **6 variáveis de ambiente** (NODE_ENV, SESSION_SECRET, MQTT_HOST, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD)
+5. Clicar em **Create Web Service**
+6. Aguardar deploy (2-3 minutos)
+
+---
+
 ## 📋 PASSO A PASSO
 
 ### 1️⃣ Deletar o Serviço Atual (Static Site)
@@ -40,62 +54,68 @@ Preencha os campos com estas informações:
 pet-feeder-dashboard
 ```
 
-#### **Root Directory** (Pasta raiz)
-```
-rep-dashboard
-```
-
-#### **Environment** (Ambiente)
-```
-Node
-```
-
 #### **Region** (Região)
-```
-São Paulo (South America)
-```
-*Ou a mais próxima de você*
+Selecione: **Oregon (US West)** ou qualquer outra disponível
 
 #### **Branch** (Branch do Git)
 ```
 main
 ```
 
+#### **Root Directory** (deixe vazio ou configure depois)
+O Render vai usar o `render.yaml` que já está configurado com `rootDir: rep-dashboard`
+
 #### **Build Command** (Comando de build)
 ```
 npm install
 ```
+*Ou use `yarn` se preferir*
 
 #### **Start Command** (Comando de start)
 ```
 npm start
 ```
+*Ou use `yarn start` se usou yarn no build*
 
 #### **Instance Type** (Tipo de instância)
-```
-Free
-```
+Selecione: **Free** (512 MB RAM, 0.1 CPU, $0/month)
 
 ---
 
 ### 4️⃣ Adicionar Variáveis de Ambiente
 
-Antes de criar o serviço, role a página até **Environment Variables** e adicione:
+Na seção **Environment Variables**, você verá:
+- Um campo **NAME_OF_VARIABLE** (nome da variável)
+- Um campo **value** (valor da variável)
+- Botão **+ Add Environment Variable** para adicionar mais
 
-| Key | Value |
-|-----|-------|
-| `NODE_ENV` | `production` |
-| `SESSION_SECRET` | `AlimentadorPetSecure2024!@#$` |
-| `MQTT_HOST` | `56d05fe4fbc64e80964aa78d92456f22.s1.eu.hivemq.cloud` |
-| `MQTT_PORT` | `8884` |
-| `MQTT_USERNAME` | `NewWeb` |
-| `MQTT_PASSWORD` | `Senha1234` |
+Adicione as seguintes variáveis uma por uma:
 
-Para adicionar cada variável:
-1. Clique em **Add Environment Variable**
-2. Digite o **Key** (nome da variável)
-3. Digite o **Value** (valor da variável)
-4. Repita para todas as variáveis acima
+**Variável 1:**
+- NAME_OF_VARIABLE: `NODE_ENV`
+- value: `production`
+
+**Variável 2:**
+- NAME_OF_VARIABLE: `SESSION_SECRET`
+- value: `AlimentadorPetSecure2024!@#$`
+
+**Variável 3:**
+- NAME_OF_VARIABLE: `MQTT_HOST`
+- value: `56d05fe4fbc64e80964aa78d92456f22.s1.eu.hivemq.cloud`
+
+**Variável 4:**
+- NAME_OF_VARIABLE: `MQTT_PORT`
+- value: `8884`
+
+**Variável 5:**
+- NAME_OF_VARIABLE: `MQTT_USERNAME`
+- value: `NewWeb`
+
+**Variável 6:**
+- NAME_OF_VARIABLE: `MQTT_PASSWORD`
+- value: `Senha1234`
+
+> 💡 **Dica:** Clique em **+ Add Environment Variable** após preencher cada par de variável para adicionar a próxima
 
 ---
 

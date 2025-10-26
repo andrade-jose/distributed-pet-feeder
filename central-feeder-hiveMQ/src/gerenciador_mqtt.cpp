@@ -160,9 +160,9 @@ bool GerenciadorMQTT::publicar(const String& topico, const String& payload) {
         Serial.println("MQTT não conectado, não é possível publicar");
         return false;
     }
-    
+
     bool sucesso = mqttClient->publish(topico.c_str(), payload.c_str());
-    
+
     if (sucesso) {
         DEBUG_PRINTF("MQTT publicado: %s -> %s\n", topico.c_str(), payload.c_str());
         ultimo_pacote = millis();
@@ -170,7 +170,28 @@ bool GerenciadorMQTT::publicar(const String& topico, const String& payload) {
         DEBUG_PRINTF("Falha ao publicar MQTT: %s\n", topico.c_str());
         pacotes_perdidos++;
     }
-    
+
+    return sucesso;
+}
+
+// NOVO: Publicar com retain flag
+bool GerenciadorMQTT::publicarComRetain(const String& topico, const String& payload) {
+    if (!estaConectado()) {
+        Serial.println("MQTT não conectado, não é possível publicar");
+        return false;
+    }
+
+    // Converter String para bytes para usar retain
+    bool sucesso = mqttClient->publish(topico.c_str(), (uint8_t*)payload.c_str(), payload.length(), true);
+
+    if (sucesso) {
+        DEBUG_PRINTF("MQTT publicado (retain): %s -> %s\n", topico.c_str(), payload.c_str());
+        ultimo_pacote = millis();
+    } else {
+        DEBUG_PRINTF("Falha ao publicar MQTT (retain): %s\n", topico.c_str());
+        pacotes_perdidos++;
+    }
+
     return sucesso;
 }
 
@@ -373,71 +394,123 @@ bool GerenciadorMQTT::inscreverTopicos() {
         return false;
     }
 
-    DEBUG_PRINTLN("=== INSCREVENDO EM TÓPICOS ===");
+    DEBUG_PRINTLN("=== INSCREVENDO EM TÓPICOS (OTIMIZADOS) ===");
 
     bool sucesso = true;
 
-    // Status das remotas (com wildcard)
-    String topico1 = "alimentador/remota/+/status";
-    if (mqttClient->subscribe(topico1.c_str())) {
-        DEBUG_PRINTF("✓ Inscrito: %s\n", topico1.c_str());
-    } else {
-        DEBUG_PRINTF("✗ Falha: %s\n", topico1.c_str());
-        sucesso = false;
-    }
+    // === TÓPICOS OTIMIZADOS (NOVOS) ===
 
-    // Status geral (compatibilidade)
-    String topico2 = "alimentador/remota/status";
-    if (mqttClient->subscribe(topico2.c_str())) {
-        DEBUG_PRINTF("✓ Inscrito: %s\n", topico2.c_str());
-    } else {
-        DEBUG_PRINTF("✗ Falha: %s\n", topico2.c_str());
-        sucesso = false;
-    }
-
-    // Vida das remotas
-    String topico3 = "alimentador/remota/+/vida";
-    if (mqttClient->subscribe(topico3.c_str())) {
-        DEBUG_PRINTF("✓ Inscrito: %s\n", topico3.c_str());
-    } else {
-        DEBUG_PRINTF("✗ Falha: %s\n", topico3.c_str());
-        sucesso = false;
-    }
-
-    // Heartbeat geral
+    // Heartbeat geral (a/r/hb) - PRIORIDADE 1
     if (mqttClient->subscribe(MQTT_TOPIC_HEARTBEAT_GERAL)) {
-        DEBUG_PRINTF("✓ Inscrito: %s\n", MQTT_TOPIC_HEARTBEAT_GERAL);
+        DEBUG_PRINTF("✓ Inscrito: %s (heartbeat)\n", MQTT_TOPIC_HEARTBEAT_GERAL);
     } else {
         DEBUG_PRINTF("✗ Falha: %s\n", MQTT_TOPIC_HEARTBEAT_GERAL);
         sucesso = false;
     }
 
-    // Respostas das remotas
-    String topico5 = "alimentador/remota/+/resposta";
-    if (mqttClient->subscribe(topico5.c_str())) {
-        DEBUG_PRINTF("✓ Inscrito: %s\n", topico5.c_str());
+    // Status com wildcard (a/r/+/st)
+    String topico_status = "a/r/+/st";
+    if (mqttClient->subscribe(topico_status.c_str())) {
+        DEBUG_PRINTF("✓ Inscrito: %s (status)\n", topico_status.c_str());
     } else {
-        DEBUG_PRINTF("✗ Falha: %s\n", topico5.c_str());
+        DEBUG_PRINTF("✗ Falha: %s\n", topico_status.c_str());
         sucesso = false;
     }
 
-    // Respostas gerais (compatibilidade)
-    if (mqttClient->subscribe(MQTT_TOPIC_CONCLUIDO_GERAL)) {
-        DEBUG_PRINTF("✓ Inscrito: %s\n", MQTT_TOPIC_CONCLUIDO_GERAL);
+    // Heartbeat individual (a/r/+/hb)
+    String topico_hb_indiv = "a/r/+/hb";
+    if (mqttClient->subscribe(topico_hb_indiv.c_str())) {
+        DEBUG_PRINTF("✓ Inscrito: %s (heartbeat individual)\n", topico_hb_indiv.c_str());
     } else {
-        DEBUG_PRINTF("✗ Falha: %s\n", MQTT_TOPIC_CONCLUIDO_GERAL);
+        DEBUG_PRINTF("✗ Falha: %s\n", topico_hb_indiv.c_str());
         sucesso = false;
     }
 
-    // Alertas de ração
+    // Respostas (a/r/+/rsp)
+    String topico_rsp = "a/r/+/rsp";
+    if (mqttClient->subscribe(topico_rsp.c_str())) {
+        DEBUG_PRINTF("✓ Inscrito: %s (respostas)\n", topico_rsp.c_str());
+    } else {
+        DEBUG_PRINTF("✗ Falha: %s\n", topico_rsp.c_str());
+        sucesso = false;
+    }
+
+    // Alertas de ração (a/r/alr)
     if (mqttClient->subscribe(MQTT_TOPIC_ALERTA_RACAO)) {
-        DEBUG_PRINTF("✓ Inscrito: %s\n", MQTT_TOPIC_ALERTA_RACAO);
+        DEBUG_PRINTF("✓ Inscrito: %s (alertas)\n", MQTT_TOPIC_ALERTA_RACAO);
     } else {
         DEBUG_PRINTF("✗ Falha: %s\n", MQTT_TOPIC_ALERTA_RACAO);
         sucesso = false;
     }
 
+    // Concluído geral (a/r/done)
+    if (mqttClient->subscribe(MQTT_TOPIC_CONCLUIDO_GERAL)) {
+        DEBUG_PRINTF("✓ Inscrito: %s (concluído)\n", MQTT_TOPIC_CONCLUIDO_GERAL);
+    } else {
+        DEBUG_PRINTF("✗ Falha: %s\n", MQTT_TOPIC_CONCLUIDO_GERAL);
+        sucesso = false;
+    }
+
+    // === TÓPICOS LEGADOS (COMPATIBILIDADE) ===
+    DEBUG_PRINTLN("--- Inscrevendo tópicos legados ---");
+
+    // Status geral antigo
+    String topico_status_legacy = "alimentador/remota/status";
+    if (mqttClient->subscribe(topico_status_legacy.c_str())) {
+        DEBUG_PRINTF("✓ Inscrito: %s (legacy)\n", topico_status_legacy.c_str());
+    }
+
+    // Status com wildcard antigo
+    String topico_status_legacy_wc = "alimentador/remota/+/status";
+    if (mqttClient->subscribe(topico_status_legacy_wc.c_str())) {
+        DEBUG_PRINTF("✓ Inscrito: %s (legacy)\n", topico_status_legacy_wc.c_str());
+    }
+
+    // Vida/heartbeat antigo
+    String topico_vida_legacy = "alimentador/remota/+/vida";
+    if (mqttClient->subscribe(topico_vida_legacy.c_str())) {
+        DEBUG_PRINTF("✓ Inscrito: %s (legacy)\n", topico_vida_legacy.c_str());
+    }
+
+    // Heartbeat geral antigo
+    String topico_hb_legacy = "alimentador/remota/heartbeat";
+    if (mqttClient->subscribe(topico_hb_legacy.c_str())) {
+        DEBUG_PRINTF("✓ Inscrito: %s (legacy)\n", topico_hb_legacy.c_str());
+    }
+
+    // Respostas antigas
+    String topico_resp_legacy = "alimentador/remota/+/resposta";
+    if (mqttClient->subscribe(topico_resp_legacy.c_str())) {
+        DEBUG_PRINTF("✓ Inscrito: %s (legacy)\n", topico_resp_legacy.c_str());
+    }
+
+    // Alertas antigos
+    String topico_alerta_legacy = "alimentador/remota/alerta_racao";
+    if (mqttClient->subscribe(topico_alerta_legacy.c_str())) {
+        DEBUG_PRINTF("✓ Inscrito: %s (legacy)\n", topico_alerta_legacy.c_str());
+    }
+
+    // === TÓPICOS DE CONFIGURAÇÃO (DASHBOARD) ===
+    DEBUG_PRINTLN("--- Inscrevendo tópicos de configuração ---");
+
+    // Config Set (Dashboard envia config)
+    if (mqttClient->subscribe(MQTT_TOPIC_CONFIG_SET)) {
+        DEBUG_PRINTF("✓ Inscrito: %s\n", MQTT_TOPIC_CONFIG_SET);
+    } else {
+        DEBUG_PRINTF("✗ Falha: %s\n", MQTT_TOPIC_CONFIG_SET);
+        sucesso = false;
+    }
+
+    // Config Query (Dashboard solicita config)
+    if (mqttClient->subscribe(MQTT_TOPIC_CONFIG_QUERY)) {
+        DEBUG_PRINTF("✓ Inscrito: %s\n", MQTT_TOPIC_CONFIG_QUERY);
+    } else {
+        DEBUG_PRINTF("✗ Falha: %s\n", MQTT_TOPIC_CONFIG_QUERY);
+        sucesso = false;
+    }
+
     DEBUG_PRINTLN("===============================");
+    DEBUG_PRINTF("Total inscrições: 14 (6 otimizados + 6 legados + 2 config)\n");
 
     return sucesso;
 }
@@ -457,6 +530,134 @@ bool GerenciadorMQTT::publicarStatusCentral(String status) {
     serializeJson(doc, payload);
 
     return mqttClient->publish(MQTT_TOPIC_CENTRAL_STATUS, payload.c_str());
+}
+
+// NOVO: Configurar horário de uma refeição específica
+bool GerenciadorMQTT::configurarHorarioRefeicao(int idRemota, int indiceRefeicao, int hora, int minuto, int quantidade) {
+    if (!estaConectado()) {
+        DEBUG_PRINTLN("MQTT não conectado - configuração de horário não enviada");
+        return false;
+    }
+
+    String topico = construirTopico(MQTT_TOPIC_HORARIO_REMOTA, idRemota);
+
+    // JSON compacto: {"i":0,"h":8,"m":30,"q":250}
+    StaticJsonDocument<128> doc;
+    doc["i"] = indiceRefeicao;
+    doc["h"] = hora;
+    doc["m"] = minuto;
+    doc["q"] = quantidade;
+
+    String payload;
+    serializeJson(doc, payload);
+
+    DEBUG_PRINTF("Configurando refeição %d para Remota %d...\n", indiceRefeicao, idRemota);
+    DEBUG_PRINTF("  Tópico: %s\n", topico.c_str());
+    DEBUG_PRINTF("  Payload: %s\n", payload.c_str());
+
+    // Publicar com retain=false (QoS é configurado via setClient, não aqui)
+    bool sucesso = mqttClient->publish(topico.c_str(), payload.c_str());
+
+    if (sucesso) {
+        DEBUG_PRINTF("✓ Refeição %d configurada: Remota %d às %02d:%02d (%dg)\n",
+                    indiceRefeicao, idRemota, hora, minuto, quantidade);
+    } else {
+        DEBUG_PRINTF("✗ Falha ao configurar refeição %d para Remota %d\n", indiceRefeicao, idRemota);
+    }
+
+    return sucesso;
+}
+
+// NOVO: Publicar estado completo de uma remota (com retain)
+bool GerenciadorMQTT::publicarEstadoCompleto(int idRemota) {
+    if (!estaConectado()) {
+        DEBUG_PRINTLN("MQTT não conectado - estado não publicado");
+        return false;
+    }
+
+    // Encontrar a remota no estadoSistema
+    int indice = -1;
+    for (int i = 0; i < estadoSistema.numRemotas; i++) {
+        if (estadoSistema.remotas[i].id == idRemota) {
+            indice = i;
+            break;
+        }
+    }
+
+    if (indice == -1) {
+        DEBUG_PRINTF("Remota %d não encontrada no sistema\n", idRemota);
+        return false;
+    }
+
+    EstadoSistema::EstadoRemota& remota = estadoSistema.remotas[indice];
+
+    // Construir JSON compacto: {"r":1,"f":[{"h":8,"m":30,"q":250,"u":"08:30"}...],"o":1,"a":1,"t":123456}
+    StaticJsonDocument<512> doc;
+    doc["r"] = remota.id;
+
+    JsonArray feeds = doc.createNestedArray("f");
+    for (int i = 0; i < 3; i++) {
+        JsonObject feed = feeds.createNestedObject();
+        feed["h"] = remota.refeicoes[i].hora;
+        feed["m"] = remota.refeicoes[i].minuto;
+        feed["q"] = remota.refeicoes[i].quantidade;
+        feed["u"] = remota.refeicoes[i].ultimaExecucao;
+    }
+
+    doc["o"] = (remota.conectada && remota.online) ? 1 : 0;
+    doc["a"] = estadoSistema.remotaAtivaRecente(remota.id) ? 1 : 0;
+    doc["t"] = millis();
+
+    String payload;
+    serializeJson(doc, payload);
+
+    // Tópico: a/c/s/1
+    char topico[16];
+    snprintf(topico, sizeof(topico), MQTT_TOPIC_STATE, idRemota);
+
+    DEBUG_PRINTF("Publicando estado completo da Remota %d (retain)...\n", idRemota);
+    DEBUG_PRINTF("  Tópico: %s\n", topico);
+    DEBUG_PRINTF("  Payload: %s\n", payload.c_str());
+
+    bool sucesso = publicarComRetain(String(topico), payload);
+
+    if (sucesso) {
+        DEBUG_PRINTF("✓ Estado completo publicado para Remota %d\n", idRemota);
+    } else {
+        DEBUG_PRINTF("✗ Falha ao publicar estado da Remota %d\n", idRemota);
+    }
+
+    return sucesso;
+}
+
+// NOVO: Notificar mudança de configuração
+bool GerenciadorMQTT::notificarMudancaConfig(int idRemota, int indiceRefeicao, int hora, int minuto, int quantidade, const char* origem) {
+    if (!estaConectado()) {
+        return false;
+    }
+
+    // JSON compacto: {"r":1,"i":0,"h":9,"m":15,"q":300,"s":"l"}
+    StaticJsonDocument<128> doc;
+    doc["r"] = idRemota;
+    doc["i"] = indiceRefeicao;
+    doc["h"] = hora;
+    doc["m"] = minuto;
+    doc["q"] = quantidade;
+    doc["s"] = origem; // "l" = lcd, "d" = dashboard
+
+    String payload;
+    serializeJson(doc, payload);
+
+    DEBUG_PRINTF("Notificando mudança de config: Remota %d, Refeição %d, origem=%s\n",
+                idRemota, indiceRefeicao, origem);
+
+    bool sucesso = publicar(String(MQTT_TOPIC_CONFIG_UPDATE), payload);
+
+    if (sucesso) {
+        DEBUG_PRINTF("✓ Notificação enviada\n");
+    }
+
+    return sucesso;
 }
 
 // Extrair ID da remota do tópico

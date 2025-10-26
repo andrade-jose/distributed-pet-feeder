@@ -50,11 +50,17 @@ public:
 
     // Comandos para remotas
     bool publicar(const String& topico, const String& payload);
+    bool publicarComRetain(const String& topico, const String& payload); // NOVO: publish com retain
     bool enviarComandoRemota(int idRemota, const String& acao, int tempo = 0);
     bool enviarComandoGeral(const String& acao, int tempo = 0, int idRemota = 1);
     bool configurarHorarioRemota(int idRemota, int hora, int minuto, int quantidade);
+    bool configurarHorarioRefeicao(int idRemota, int indiceRefeicao, int hora, int minuto, int quantidade); // NOVO
     bool configurarTempoMovimento(int idRemota, int tempo);
     bool solicitarStatusRemota(int idRemota);
+
+    // Configuração via Dashboard (NOVO)
+    bool publicarEstadoCompleto(int idRemota); // Publica estado completo com retain
+    bool notificarMudancaConfig(int idRemota, int indiceRefeicao, int hora, int minuto, int quantidade, const char* origem); // Notifica mudança
 
     // Inscrições em tópicos
     bool inscreverTopicos();

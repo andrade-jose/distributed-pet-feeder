@@ -30,18 +30,17 @@ void GerenciadorWiFi::inicializar() {
     // Registrar evento
     WiFi.onEvent(GerenciadorWiFi::aoEventoWiFi);
 
-    // Carregar credenciais salvas
-    bool credenciaisSalvas = GerenciadorWiFi::carregarCredenciais();
+    // ✅ FORÇAR uso das credenciais do config.h
+    Serial.println("Limpando credenciais antigas...");
+    GerenciadorWiFi::limparCredenciais();
 
-    // Se não houver credenciais salvas, usar as padrão do config.h
-    if (!credenciaisSalvas || GerenciadorWiFi::senhaSalva.isEmpty()) {
-        Serial.println("Usando credenciais padrão do config.h");
-        GerenciadorWiFi::ssidSalvo = DEFAULT_WIFI_SSID;
-        GerenciadorWiFi::senhaSalva = DEFAULT_WIFI_PASSWORD;
-        GerenciadorWiFi::salvarCredenciais(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASSWORD);
-    }
+    Serial.println("Usando credenciais do config.h");
+    Serial.printf("SSID: %s\n", DEFAULT_WIFI_SSID);
+    GerenciadorWiFi::ssidSalvo = DEFAULT_WIFI_SSID;
+    GerenciadorWiFi::senhaSalva = DEFAULT_WIFI_PASSWORD;
+    GerenciadorWiFi::salvarCredenciais(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASSWORD);
 
-    // Tentar conectar automaticamente se tiver credenciais
+    // Tentar conectar automaticamente
     if (GerenciadorWiFi::reconexaoAutomatica &&
         !GerenciadorWiFi::ssidSalvo.isEmpty() &&
         !GerenciadorWiFi::senhaSalva.isEmpty()) {

@@ -36,13 +36,19 @@ void EstadoSistema::atualizarStatusMqtt(bool conectado) {
 }
 
 void EstadoSistema::atualizarRemota(int id, bool conectada, bool online, String nivelRacao) {
+    // VALIDAR ID ANTES DE PROCESSAR (evita IDs inválidos causarem loops)
+    if (id < 1 || id > MAX_REMOTAS) {
+        Serial.printf("[ERRO] ID de remota inválido: %d (deve ser 1-%d)\n", id, MAX_REMOTAS);
+        return;
+    }
+
     for (int i = 0; i < numRemotas; i++) {
         if (remotas[i].id == id) {
             bool statusAnterior = remotas[i].conectada && remotas[i].online;
             bool statusNovo = conectada && online;
-            bool mudou = (remotas[i].conectada != conectada) || 
+            bool mudou = (remotas[i].conectada != conectada) ||
                         (remotas[i].online != online);
-            
+
             remotas[i].conectada = conectada;
             remotas[i].online = online;
             if (nivelRacao != "") {
@@ -51,22 +57,40 @@ void EstadoSistema::atualizarRemota(int id, bool conectada, bool online, String 
             if (online) {
                 remotas[i].ultimoHeartbeat = millis();
             }
-            
+
             if (mudou && onRemotaMudou) {
                 onRemotaMudou(id, statusNovo);
             }
-            
-            Serial.printf("[ESTADO] Remota %d: %s/%s, Nível: %s\n", 
+
+            Serial.printf("[ESTADO] Remota %d: %s/%s, Nível: %s\n",
                          id, conectada ? "CONECTADA" : "DESCONECTADA",
                          online ? "ONLINE" : "OFFLINE", nivelRacao.c_str());
             return;
         }
     }
-    
+
     // Se chegou aqui, a remota não existe - adicionar automaticamente
-    Serial.printf("[ESTADO] Remota %d não encontrada, adicionando automaticamente\n", id);
+    Serial.printf("[ESTADO] Remota %d não encontrada, adicionando\n", id);
     adicionarRemota(id);
-    atualizarRemota(id, conectada, online, nivelRacao);
+
+    // Após adicionar, atualizar o estado diretamente (sem recursão)
+    for (int i = 0; i < numRemotas; i++) {
+        if (remotas[i].id == id) {
+            remotas[i].conectada = conectada;
+            remotas[i].online = online;
+            if (nivelRacao != "") {
+                remotas[i].nivelRacao = nivelRacao;
+            }
+            if (online) {
+                remotas[i].ultimoHeartbeat = millis();
+            }
+            Serial.printf("[ESTADO] Remota %d atualizada após criação\n", id);
+            return;
+        }
+    }
+
+    // Se ainda não encontrou após adicionar, significa que MAX_REMOTAS foi atingido
+    Serial.printf("[ERRO] Não foi possível adicionar remota %d (limite atingido)\n", id);
 }
 
 void EstadoSistema::adicionarRemota(int id) {
@@ -97,6 +121,23 @@ bool EstadoSistema::remotaConectada(int id) {
     for (int i = 0; i < numRemotas; i++) {
         if (remotas[i].id == id) {
             return remotas[i].conectada && remotas[i].online;
+        }
+    }
+    return false;
+}
+
+// Verifica se a remota teve sinal de vida nos últimos 10 minutos
+bool EstadoSistema::remotaAtivaRecente(int id) {
+    unsigned long agora = millis();
+    for (int i = 0; i < numRemotas; i++) {
+        if (remotas[i].id == id) {
+            // Se nunca recebeu heartbeat, não está ativa
+            if (remotas[i].ultimoHeartbeat == 0) {
+                return false;
+            }
+            // Verifica se o último heartbeat foi nos últimos 10 minutos
+            unsigned long tempoDesdeUltimoSinal = agora - remotas[i].ultimoHeartbeat;
+            return tempoDesdeUltimoSinal < TIMEOUT_REMOTA_ATIVA;
         }
     }
     return false;

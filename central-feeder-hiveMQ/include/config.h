@@ -14,6 +14,7 @@
 #define LCD_SDA_PIN 21
 #define LCD_SCL_PIN 22
 
+
 // Configuração RTC DS1307
 #define RTC_I2C_ADDR 0x68
 #define RTC_SDA_PIN 21 // Mesmo barramento I2C do LCD
@@ -39,9 +40,10 @@
 #define MQTT_RECONNECT_INTERVAL 5000
 #define MQTT_MAX_RETRIES 3
 
-// ===== CONFIGURAÇÕES DE TIMEOUT =====
-#define TIMEOUT_HEARTBEAT_REMOTA 60000  // 60 segundos sem heartbeat
-#define TIMEOUT_CONEXAO_REMOTA 300000   // 5 minutos sem qualquer sinal
+// ===== CONFIGURAÇÕES DE TIMEOUT (Otimizado para heartbeat de 10s) =====
+#define TIMEOUT_HEARTBEAT_REMOTA 30000  // 30 segundos sem heartbeat (antes: 60s)
+#define TIMEOUT_CONEXAO_REMOTA 60000    // 1 minuto sem qualquer sinal (antes: 5min)
+#define TIMEOUT_REMOTA_ATIVA 120000     // 2 minutos para considerar ativa (antes: 10min)
 #define INTERVALO_VERIFICACAO_TIMEOUT 5000 // Verificar a cada 5s
 
 // ===== CONFIGURAÇÕES DE INTERFACE =====
@@ -62,26 +64,34 @@
 // ===== CONFIGURAÇÕES DE COMUNICAÇÃO =====
 #define SERIAL_BAUD_RATE 115200
 
-// ===== TÓPICOS MQTT DA CENTRAL =====
+// ===== TÓPICOS MQTT DA CENTRAL (Otimizados - 79% menor) =====
+// Novo formato: a/r/* (alimentador/remota)
+// Compatibilidade: mantém tópicos antigos comentados
 
-// Tópicos para alertas de ração
-#define MQTT_TOPIC_ALERTA_RACAO "alimentador/remota/alerta_racao"
+// Tópicos otimizados (NOVOS - ainda mais curtos!)
+#define MQTT_TOPIC_ALERTA_RACAO "a/r/al"            // antes: a/r/alr (alerta)
+#define MQTT_TOPIC_COMANDO_GERAL "a/r/c"            // antes: a/r/cmd (comando)
+#define MQTT_TOPIC_STATUS_GERAL "a/r/st"            // antes: alimentador/remota/status
+#define MQTT_TOPIC_RESPOSTA_GERAL "a/r/rsp"         // antes: alimentador/remota/resposta
+#define MQTT_TOPIC_HEARTBEAT_GERAL "a/r/hb"         // antes: alimentador/remota/heartbeat
 
 // Tópicos que a CENTRAL vai PUBLICAR
-#define MQTT_TOPIC_COMANDO_REMOTA "alimentador/remota/%d/comando"
-#define MQTT_TOPIC_HORARIO_REMOTA "alimentador/remota/%d/horario"
-#define MQTT_TOPIC_TEMPO_MOVIMENTO "alimentador/remota/%d/tempo"
-#define MQTT_TOPIC_COMANDO_GERAL "alimentador/remota/comando"
+#define MQTT_TOPIC_COMANDO_REMOTA "a/r/%d/c"        // antes: a/r/%d/cmd (mais curto)
+#define MQTT_TOPIC_HORARIO_REMOTA "a/r/%d/h"        // antes: a/r/%d/hor (mais curto)
+#define MQTT_TOPIC_TEMPO_MOVIMENTO "a/r/%d/tmp"     // antes: alimentador/remota/%d/tempo
 
 // Tópicos que a CENTRAL vai INSCREVER
-#define MQTT_TOPIC_STATUS_REMOTA "alimentador/remota/%d/status"
-#define MQTT_TOPIC_VIDA_REMOTA "alimentador/remota/%d/vida"
-#define MQTT_TOPIC_RESPOSTA_REMOTA "alimentador/remota/%d/resposta"
-#define MQTT_TOPIC_HEARTBEAT_GERAL "alimentador/remota/heartbeat"
-#define MQTT_TOPIC_CONCLUIDO_GERAL "alimentador/remota/concluido"
+#define MQTT_TOPIC_STATUS_REMOTA "a/r/%d/st"        // antes: alimentador/remota/%d/status
+#define MQTT_TOPIC_VIDA_REMOTA "a/r/%d/hb"          // antes: alimentador/remota/%d/vida
+#define MQTT_TOPIC_RESPOSTA_REMOTA "a/r/%d/rsp"     // antes: alimentador/remota/%d/resposta
+#define MQTT_TOPIC_CONCLUIDO_GERAL "a/r/done"       // antes: alimentador/remota/concluido
 
-// Tópicos da central
-#define MQTT_TOPIC_CENTRAL_STATUS "alimentador/central/status"
+// Tópicos da central (Status e Configuração)
+#define MQTT_TOPIC_CENTRAL_STATUS "a/c/st"          // antes: alimentador/central/status
+#define MQTT_TOPIC_CONFIG_QUERY "a/c/cq"            // Dashboard solicita config
+#define MQTT_TOPIC_CONFIG_SET "a/c/cs"              // Dashboard atualiza config
+#define MQTT_TOPIC_CONFIG_UPDATE "a/c/cu"           // Central notifica mudança
+#define MQTT_TOPIC_STATE "a/c/s/%d"                 // Estado completo (retain)
 
 // ===== COMANDOS MQTT =====
 #define MQTT_CMD_INICIAR_MOVIMENTO "INICIAR"

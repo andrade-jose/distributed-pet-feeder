@@ -1,19 +1,25 @@
-// ========== CONFIGURAÇÕES - EDITE AQUI ==========
-const MQTT_CONFIG = {
-    host: window.MQTT_HOST || '56d05fe4fbc64e80964aa78d92456f22.s1.eu.hivemq.cloud',
-    port: window.MQTT_PORT || 8884,
-    username: window.MQTT_USERNAME || 'NewWeb',
-    password: window.MQTT_PASSWORD || 'Senha1234',
-    clientId: 'web_feeder_' + Math.random().toString(16).substr(2, 8)
-};
+// ========== CONFIGURAÇÕES SEGURAS ==========
+// IMPORTANTE: As credenciais MQTT agora são obtidas do servidor de forma segura
+let MQTT_CONFIG = null; // Será carregado após autenticação
 
-// Tópicos MQTT - Compatíveis com a Remota ESP32
+// Tópicos MQTT - OTIMIZADOS (compatíveis com Central ESP32)
 const TOPICS = {
-    command: 'alimentador/remota/comando',      // Tópico que a remota escuta
-    status: 'alimentador/remota/status',        // Status da remota
-    heartbeat: 'alimentador/remota/heartbeat',  // Heartbeat da remota
-    resposta: 'alimentador/remota/resposta',    // Respostas da remota
-    alerta_racao: 'alimentador/remota/alerta_racao' // Alertas de nível de ração
+    // Tópicos de operação (remotas)
+    command: 'a/r/c',           // Comandos para remotas
+    heartbeat: 'a/r/hb',        // Heartbeat das remotas
+    alerta: 'a/r/al',           // Alertas de ração
+
+    // Tópicos de configuração (via Central)
+    configSet: 'a/c/cs',        // Enviar configuração para Central
+    configQuery: 'a/c/cq',      // Solicitar configuração da Central
+    configUpdate: 'a/c/cu',     // Receber notificações de mudanças
+    state: 'a/c/s/+',           // Receber estados completos (retain)
+
+    // Legados (manter compatibilidade)
+    status_legacy: 'alimentador/remota/status',
+    heartbeat_legacy: 'alimentador/remota/heartbeat',
+    resposta_legacy: 'alimentador/remota/resposta',
+    alerta_legacy: 'alimentador/remota/alerta_racao'
 };
 
 // Usuários e permissões
@@ -165,15 +171,21 @@ function connectMQTT() {
         connectionAttempts = 0;
         updateConnectionButtons(false, true);
 
-        // Assinar tópicos da remota
-        client.subscribe(TOPICS.status);
-        client.subscribe(TOPICS.heartbeat);
-        client.subscribe(TOPICS.resposta);
-        client.subscribe(TOPICS.alerta_racao);
+        // Assinar tópicos NOVOS (otimizados)
+        client.subscribe(TOPICS.heartbeat);      // a/r/hb
+        client.subscribe(TOPICS.alerta);         // a/r/al
+        client.subscribe(TOPICS.configUpdate);   // a/c/cu (notificações)
+        client.subscribe(TOPICS.state);          // a/c/s/+ (estados retain)
 
-        addLog('Sistema', '📥 Inscrito nos tópicos: status, heartbeat, resposta, alerta_racao');
+        // Assinar tópicos LEGADOS (compatibilidade)
+        client.subscribe(TOPICS.status_legacy);
+        client.subscribe(TOPICS.heartbeat_legacy);
+        client.subscribe(TOPICS.resposta_legacy);
+        client.subscribe(TOPICS.alerta_legacy);
 
-        // Solicitar status inicial
+        addLog('Sistema', '📥 Inscrito em 8 tópicos (4 novos + 4 legados)');
+
+        // Solicitar status inicial (não necessário com retain, mas força refresh)
         requestStatusAll();
 
         showToast('Conectado ao MQTT com sucesso!', 'success');
@@ -216,83 +228,193 @@ function disconnectMQTT() {
 }
 
 function handleMQTTMessage(topic, message) {
-    // Tópicos: alimentador/remota/status, alimentador/remota/heartbeat, etc.
-    const parts = topic.split('/');
-    const messageType = parts[2]; // status, heartbeat, resposta, alerta_racao
-
-    // ID fixo da remota (por enquanto apenas uma)
-    const feederId = '001';
-
-    // Descoberta automática da remota
-    if (!feedersData[feederId]) {
-        feedersData[feederId] = {
-            id: feederId,
-            name: `🐕 Alimentador Remoto ${feederId}`,
-            online: true,
-            lastFeed: 'Nunca',
-            lastHeartbeat: new Date(),
-            schedule: [
-                { time: '08:00', portion: 50 },
-                { time: '14:00', portion: 50 },
-                { time: '20:00', portion: 50 }
-            ],
-            autoDiscovered: true
-        };
-        addLog('Descoberta', `Alimentador remoto detectado: ${feederId}`);
-        showToast(`Alimentador remoto detectado!`, 'success');
-        renderFeeders();
-    }
+    console.log(`[MQTT] ${topic}: ${message}`);
 
     try {
-        // Tentar parsear como JSON, se falhar, usar como texto
+        // Parsear JSON (compacto ou legado)
         let data;
         try {
             data = JSON.parse(message);
         } catch {
-            data = { message: message };
+            data = { raw: message };
         }
+
+        // === TÓPICO: Estado completo (a/c/s/X) - RETAIN ===
+        if (topic.startsWith('a/c/s/')) {
+            const remotaId = topic.split('/')[3];
+            handleEstadoCompleto(remotaId, data);
+            return;
+        }
+
+        // === TÓPICO: Notificação de mudança (a/c/cu) ===
+        if (topic === TOPICS.configUpdate) {
+            handleNotificacaoMudanca(data);
+            return;
+        }
+
+        // === TÓPICO: Heartbeat (a/r/hb) ===
+        if (topic === TOPICS.heartbeat || topic === TOPICS.heartbeat_legacy) {
+            handleHeartbeat(data);
+            return;
+        }
+
+        // === TÓPICO: Alerta (a/r/al) ===
+        if (topic === TOPICS.alerta || topic === TOPICS.alerta_legacy) {
+            handleAlerta(data);
+            return;
+        }
+
+        // === TÓPICOS LEGADOS (compatibilidade) ===
+        const parts = topic.split('/');
+        const messageType = parts[parts.length - 1];
 
         switch(messageType) {
             case 'status':
-                feedersData[feederId].online = true;
-                feedersData[feederId].lastHeartbeat = new Date();
-                if (data.lastFeed) {
-                    feedersData[feederId].lastFeed = data.lastFeed;
+                const feederId = parts[2] || '001';
+                if (feedersData[feederId]) {
+                    feedersData[feederId].online = true;
+                    feedersData[feederId].lastHeartbeat = new Date();
+                    addLog(feederId, `📊 Status recebido (legacy)`);
                 }
-                addLog(feederId, `📊 Status recebido`);
-                break;
-
-            case 'heartbeat':
-                feedersData[feederId].online = true;
-                feedersData[feederId].lastHeartbeat = new Date();
-                addLog(feederId, `💓 Heartbeat recebido`);
                 break;
 
             case 'resposta':
-                feedersData[feederId].online = true;
-                feedersData[feederId].lastHeartbeat = new Date();
-                addLog(feederId, `📥 Resposta: ${message}`);
-
-                // Se for resposta de alimentação
+                addLog('Sistema', `📥 Resposta: ${message}`);
                 if (data.comando === 'ALIMENTAR' || data.action === 'feed') {
-                    feedersData[feederId].lastFeed = new Date().toLocaleString('pt-BR');
-                    showToast(`Alimentação realizada com sucesso!`, 'success');
+                    showToast(`Alimentação realizada!`, 'success');
                 }
                 break;
 
             case 'alerta_racao':
-                feedersData[feederId].online = true;
-                addLog(feederId, `⚠️ Alerta: ${message}`, 'warning');
-                showToast(`Atenção: Nível de ração baixo!`, 'error');
+                const fId = parts[2] || '001';
+                if (feedersData[fId]) {
+                    feedersData[fId].online = true;
+                    addLog(fId, `⚠️ Alerta: ${message}`, 'warning');
+                    showToast(`Atenção: Nível de ração baixo!`, 'error');
+                    updateFeederCard(fId);
+                }
                 break;
 
             default:
                 addLog('MQTT', `Tópico desconhecido: ${topic}`, 'warning');
         }
-
-        updateFeederCard(feederId);
     } catch (e) {
         addLog('Erro', `Falha ao processar mensagem [${topic}]: ${e.message}`, 'error');
+    }
+}
+
+// === NOVOS HANDLERS PARA TÓPICOS OTIMIZADOS ===
+
+// Handler: Estado completo (a/c/s/X)
+function handleEstadoCompleto(remotaId, data) {
+    // data = {"r":1,"f":[{"h":8,"m":30,"q":250,"u":"08:30"},...],"o":1,"a":1,"t":123456}
+    const feederId = String(remotaId).padStart(3, '0');
+
+    // Criar ou atualizar feeder
+    if (!feedersData[feederId]) {
+        feedersData[feederId] = {
+            id: feederId,
+            name: `🐕 Alimentador Remoto ${remotaId}`,
+            online: false,
+            lastFeed: 'Nunca',
+            lastHeartbeat: new Date(),
+            schedule: [],
+            autoDiscovered: true
+        };
+        addLog('Descoberta', `Remota ${remotaId} detectada via estado completo`);
+    }
+
+    // Atualizar dados
+    feedersData[feederId].online = data.o === 1;
+    feedersData[feederId].ativa = data.a === 1;
+
+    // Atualizar horários (f = feeds)
+    if (data.f && Array.isArray(data.f)) {
+        feedersData[feederId].schedule = data.f.map(feed => ({
+            time: `${String(feed.h).padStart(2, '0')}:${String(feed.m).padStart(2, '0')}`,
+            portion: feed.q,
+            lastExec: feed.u || 'Nunca'
+        }));
+    }
+
+    addLog(feederId, `📡 Estado completo recebido (${data.f.length} refeições)`);
+    renderFeeders();
+}
+
+// Handler: Notificação de mudança (a/c/cu)
+function handleNotificacaoMudanca(data) {
+    // data = {"r":1,"i":0,"h":9,"m":15,"q":300,"s":"l"}
+    const remotaId = data.r;
+    const feederId = String(remotaId).padStart(3, '0');
+    const indice = data.i;
+    const hora = data.h;
+    const minuto = data.m;
+    const quantidade = data.q;
+    const origem = data.s === 'l' ? 'LCD' : 'Dashboard';
+
+    addLog(feederId, `🔔 Mudança de config (${origem}): Refeição ${indice + 1} → ${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')} (${quantidade}g)`);
+
+    // Atualizar localmente se já existe
+    if (feedersData[feederId] && feedersData[feederId].schedule[indice]) {
+        feedersData[feederId].schedule[indice] = {
+            time: `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`,
+            portion: quantidade,
+            lastExec: feedersData[feederId].schedule[indice].lastExec || 'Nunca'
+        };
+        renderFeeders();
+        showToast(`Horário ${indice + 1} atualizado por ${origem}`, 'info');
+    }
+}
+
+// Handler: Heartbeat (a/r/hb)
+function handleHeartbeat(data) {
+    // Formato novo: {"s":1,"i":1,"r":-45,"a":0,"t":0}
+    // Formato legado: {"status":"ALIVE","remota_id":1,...}
+    let remotaId = data.i || data.remota_id || 1;
+    const feederId = String(remotaId).padStart(3, '0');
+
+    // Descoberta automática
+    if (!feedersData[feederId]) {
+        feedersData[feederId] = {
+            id: feederId,
+            name: `🐕 Alimentador Remoto ${remotaId}`,
+            online: true,
+            lastFeed: 'Nunca',
+            lastHeartbeat: new Date(),
+            schedule: [
+                { time: '08:00', portion: 50, lastExec: 'Nunca' },
+                { time: '14:00', portion: 50, lastExec: 'Nunca' },
+                { time: '20:00', portion: 50, lastExec: 'Nunca' }
+            ],
+            autoDiscovered: true
+        };
+        addLog('Descoberta', `Remota ${remotaId} detectada via heartbeat`);
+        renderFeeders();
+    }
+
+    feedersData[feederId].online = true;
+    feedersData[feederId].lastHeartbeat = new Date();
+    addLog(feederId, `💓 Heartbeat`);
+    updateFeederCard(feederId);
+}
+
+// Handler: Alerta (a/r/al)
+function handleAlerta(data) {
+    // Formato novo: {"i":1,"n":1,"d":12.5}
+    // Formato legado: {"remota_id":1,"nivel":"BAIXO",...}
+    const remotaId = data.i || data.remota_id || 1;
+    const nivel = data.n === 1 || data.nivel === 'BAIXO';
+    const feederId = String(remotaId).padStart(3, '0');
+
+    if (nivel) {
+        addLog(feederId, `⚠️ ALERTA: Ração baixa!`, 'warning');
+        showToast(`Remota ${remotaId}: Ração baixa!`, 'error');
+    } else {
+        addLog(feederId, `✅ Nível de ração OK`);
+    }
+
+    if (feedersData[feederId]) {
+        updateFeederCard(feederId);
     }
 }
 
@@ -369,6 +491,16 @@ function testServo(feederId) {
 }
 
 function updateSchedule(feederId, scheduleIndex) {
+    if (!client || !client.connected) {
+        showToast('MQTT desconectado', 'error');
+        return;
+    }
+
+    if (!currentUser || currentUser.role !== 'dev') {
+        showToast('Apenas desenvolvedores podem configurar horários', 'error');
+        return;
+    }
+
     const timeInput = document.getElementById(`time-${feederId}-${scheduleIndex}`);
     const portionInput = document.getElementById(`portion-${feederId}-${scheduleIndex}`);
 
@@ -379,23 +511,33 @@ function updateSchedule(feederId, scheduleIndex) {
     }
 
     const portion = parseInt(portionInput.value);
-    if (isNaN(portion) || portion < 10 || portion > 200) {
-        showToast('Porção deve ser entre 10g e 200g', 'error');
+    if (isNaN(portion) || portion < 10 || portion > 990) {
+        showToast('Porção deve ser entre 10g e 990g', 'error');
         return;
     }
 
-    const schedule = {
-        index: scheduleIndex,
-        time: timeInput.value,
-        portion: portion
-    };
+    // Extrair hora e minuto
+    const [hora, minuto] = timeInput.value.split(':').map(Number);
 
-    feedersData[feederId].schedule[scheduleIndex] = schedule;
+    // Converter feederId (string "001") para remotaId (número 1)
+    const remotaId = parseInt(feederId);
 
-    if (sendCommand(feederId, 'UPDATE_SCHEDULE', schedule)) {
-        addLog(feederId, `⏰ Horário ${scheduleIndex + 1} atualizado: ${schedule.time}`);
-        showToast('Programação atualizada com sucesso!', 'success');
-    }
+    // JSON compacto: {"r":1,"i":0,"h":9,"m":15,"q":300}
+    const payload = JSON.stringify({
+        r: remotaId,
+        i: scheduleIndex,
+        h: hora,
+        m: minuto,
+        q: portion
+    });
+
+    // Enviar para Central via tópico a/c/cs
+    client.publish(TOPICS.configSet, payload);
+
+    addLog(feederId, `📤 Config enviada: Refeição ${scheduleIndex + 1} → ${hora}:${minuto} (${portion}g)`);
+    showToast(`Aguardando confirmação da Central...`, 'info');
+
+    // Nota: A atualização local será feita quando receber a/c/cu (notificação)
 }
 
 function requestStatusAll() {

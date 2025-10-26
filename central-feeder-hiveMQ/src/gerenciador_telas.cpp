@@ -15,13 +15,9 @@ bool GerenciadorTelas::precisaRedraw = false;
 // Dados das remotas
 int GerenciadorTelas::indiceRemotaAtual = 0;
 int GerenciadorTelas::indiceRefeicaoAtual = 0;
-int GerenciadorTelas::idRemotaBusca = 1;
 
 // Dados do sistema
 bool GerenciadorTelas::luzLcd = true;
-String GerenciadorTelas::dataUltimoBooter = "01/08/2025";
-String GerenciadorTelas::horaUltimoBooter = "00:00:00";
-
 
 // Controle de tempo
 unsigned long GerenciadorTelas::ultimaAtualizacao = 0;
@@ -36,7 +32,6 @@ unsigned long GerenciadorTelas::ultimaPiscadaAlerta = 0;
 bool GerenciadorTelas::estadoPiscaAlerta = false;
 
 // Callbacks
-void (*GerenciadorTelas::callbackResetSistema)() = nullptr;
 void (*GerenciadorTelas::callbackAtualizacaoRefeicao)(int, int, int, int, int) = nullptr;
 
 // =============================================================================
@@ -118,10 +113,7 @@ void GerenciadorTelas::renderizar() {
             break;
         case TipoTela::INFO_WIFI: renderizarInfoWifi(); break;
         case TipoTela::CONFIG_CENTRAL: renderizarConfigCentral(); break;
-        case TipoTela::CONFIG_ULTIMO_BOOT: renderizarUltimoBooter(); break;
-        case TipoTela::CONFIG_RESETAR: renderizarResetar(); break;
         case TipoTela::LISTA_REMOTAS: renderizarListaRemotas(); break;
-        case TipoTela::BUSCAR_REMOTA: renderizarBuscarRemota(); break;
         case TipoTela::REMOTA_ESPECIFICA: renderizarRemotaEspecifica(); break;
         case TipoTela::CONFIG_REFEICAO: renderizarConfigRefeicao(); break;
         case TipoTela::EDITAR_HORA: renderizarEditarHora(); break;
@@ -136,10 +128,7 @@ void GerenciadorTelas::gerenciarNavegacao() {
         case TipoTela::INICIO: navegarInicio(); break;
         case TipoTela::INFO_WIFI: navegarInfoWifi(); break;
         case TipoTela::CONFIG_CENTRAL: navegarConfigCentral(); break;
-        case TipoTela::CONFIG_ULTIMO_BOOT: navegarUltimoBooter(); break;
-        case TipoTela::CONFIG_RESETAR: navegarResetar(); break;
         case TipoTela::LISTA_REMOTAS: navegarListaRemotas(); break;
-        case TipoTela::BUSCAR_REMOTA: navegarBuscarRemota(); break;
         case TipoTela::REMOTA_ESPECIFICA: navegarRemotaEspecifica(); break;
         case TipoTela::CONFIG_REFEICAO: navegarConfigRefeicao(); break;
         case TipoTela::EDITAR_HORA: navegarEditarHora(); break;
@@ -176,29 +165,12 @@ void GerenciadorTelas::renderizarInfoWifi() {
 
 void GerenciadorTelas::renderizarConfigCentral() {
     String opcoes[] = {
-        "Ultimo Boot", 
-        "Resetar Sistema", 
-        "Luz LCD: " + String(luzLcd ? "ON" : "OFF"), 
+        "Luz LCD: " + String(luzLcd ? "ON" : "OFF"),
         "Voltar"
     };
-    
-    for (int i = 0; i < 4; i++) {
-        Display::setCursor(0, i);
-        Display::print((i == opcaoSelecionada ? "> " : "  ") + opcoes[i]);
-    }
-}
 
-void GerenciadorTelas::renderizarUltimoBooter() {
-    centralizarTexto(1, dataUltimoBooter);
-    centralizarTexto(2, horaUltimoBooter);
-}
-
-void GerenciadorTelas::renderizarResetar() {
-    centralizarTexto(0, "Confirmar reset?");
-    
-    String opcoes[] = {"Sim", "Nao"};
     for (int i = 0; i < 2; i++) {
-        Display::setCursor(0, i + 1);
+        Display::setCursor(0, i);
         Display::print((i == opcaoSelecionada ? "> " : "  ") + opcoes[i]);
     }
 }
@@ -206,42 +178,37 @@ void GerenciadorTelas::renderizarResetar() {
 void GerenciadorTelas::renderizarListaRemotas() {
     centralizarTexto(0, "Remotas");
 
-    // Mostrar até 2 remotas na tela
+    // Calcular quantos itens mostrar (remotas + voltar)
+    int totalOpcoes = estadoSistema.numRemotas + 1; // +1 apenas para "Voltar"
+    int linhasDisponiveis = 3; // Linhas 1, 2 e 3 (linha 0 é o título)
+
+    // Determinar o primeiro item a ser exibido com base na seleção
+    int primeiroItem = 0;
+    if (opcaoSelecionada >= linhasDisponiveis) {
+        primeiroItem = opcaoSelecionada - linhasDisponiveis + 1;
+    }
+
+    // Renderizar os itens visíveis
     int linha = 1;
-    for (int i = 0; i < estadoSistema.numRemotas && linha < 3; i++) {
+    for (int i = primeiroItem; i < totalOpcoes && linha <= 3; i++) {
         Display::setCursor(0, linha);
         String prefixo = (i == opcaoSelecionada) ? "> " : "  ";
-        String nome = "Remota " + String(estadoSistema.remotas[i].id);
-        String status = estadoSistema.remotaConectada(estadoSistema.remotas[i].id) ? "OK" : "OFF";
-        Display::print(prefixo + nome + ": " + status);
+        String texto;
+
+        if (i < estadoSistema.numRemotas) {
+            // Mostrar remota - usar remotaAtivaRecente() para verificar se teve sinal nos últimos 10 min
+            String nome = "Remota " + String(estadoSistema.remotas[i].id);
+            String status = estadoSistema.remotaAtivaRecente(estadoSistema.remotas[i].id) ? "OK" : "OFF";
+            texto = prefixo + nome + ": " + status;
+        } else {
+            // Opção "Voltar"
+            texto = prefixo + "Voltar";
+        }
+
+        Display::print(texto);
         linha++;
     }
-
-    // Opção Buscar Remota
-    Display::setCursor(0, linha);
-    String prefixo = (opcaoSelecionada == estadoSistema.numRemotas) ? "> " : "  ";
-    Display::print(prefixo + "Buscar Remota");
-    linha++;
-
-    // Opção Voltar
-    if (linha < 4) {
-        Display::setCursor(0, linha);
-        prefixo = (opcaoSelecionada == estadoSistema.numRemotas + 1) ? "> " : "  ";
-        Display::print(prefixo + "Voltar");
-    }
 }
-
-void GerenciadorTelas::renderizarBuscarRemota() {
-    centralizarTexto(0, "Digite o ID:");
-
-    // Mostrar seletor de número (1-6)
-    String display = "       ID: [" + String(idRemotaBusca) + "]";
-    centralizarTexto(2, display);
-
-    // Instruções
-    Display::printAt(0, 3, "CIMA/BAIXO  ENTER=OK");
-}
-
 
 void GerenciadorTelas::renderizarRemotaEspecifica() {
     if (indiceRemotaAtual >= estadoSistema.numRemotas) return;
@@ -362,12 +329,6 @@ void GerenciadorTelas::navegarInfoWifi() {
     }
 }
 
-void GerenciadorTelas::navegarUltimoBooter() {
-    if (Botoes::cimaPressionado() || Botoes::baixoPressionado() || Botoes::enterPressionado()) {
-        voltar();
-    }
-}
-
 void GerenciadorTelas::navegarAlertaRacao() {
     if (!alertaRacaoAtivo && (Botoes::cimaPressionado() || Botoes::baixoPressionado() || Botoes::enterPressionado())) {
         irParaTela(TipoTela::INICIO);
@@ -377,26 +338,6 @@ void GerenciadorTelas::navegarAlertaRacao() {
 
 void GerenciadorTelas::navegarConfigCentral() {
     if (Botoes::cimaPressionado()) {
-        opcaoSelecionada = (opcaoSelecionada - 1 + 4) % 4;
-        precisaRedraw = true;
-    }
-    else if (Botoes::baixoPressionado()) {
-        opcaoSelecionada = (opcaoSelecionada + 1) % 4;
-        precisaRedraw = true;
-    }
-    else if (Botoes::enterPressionado()) {
-        switch (opcaoSelecionada) {
-            case 0: irParaTela(TipoTela::CONFIG_ULTIMO_BOOT); break;
-            case 1: irParaTela(TipoTela::CONFIG_RESETAR); break;
-            case 2: alternarLuzLcd(); break;
-            case 3: irParaTela(TipoTela::INICIO); break;
-        }
-    }
-}
-
-
-void GerenciadorTelas::navegarResetar() {
-    if (Botoes::cimaPressionado()) {
         opcaoSelecionada = (opcaoSelecionada - 1 + 2) % 2;
         precisaRedraw = true;
     }
@@ -405,15 +346,15 @@ void GerenciadorTelas::navegarResetar() {
         precisaRedraw = true;
     }
     else if (Botoes::enterPressionado()) {
-        if (opcaoSelecionada == 0) {
-            resetarSistema();
+        switch (opcaoSelecionada) {
+            case 0: alternarLuzLcd(); break;
+            case 1: irParaTela(TipoTela::INICIO); break;
         }
-        voltar();
     }
 }
 
 void GerenciadorTelas::navegarListaRemotas() {
-    int maxOpcoes = estadoSistema.numRemotas + 2; // remotas + buscar + voltar
+    int maxOpcoes = estadoSistema.numRemotas + 1; // remotas + voltar
 
     if (Botoes::cimaPressionado()) {
         opcaoSelecionada = (opcaoSelecionada - 1 + maxOpcoes) % maxOpcoes;
@@ -428,50 +369,9 @@ void GerenciadorTelas::navegarListaRemotas() {
             // Selecionou uma remota diretamente
             indiceRemotaAtual = opcaoSelecionada;
             irParaTela(TipoTela::REMOTA_ESPECIFICA);
-        } else if (opcaoSelecionada == estadoSistema.numRemotas) {
-            // Selecionou "Buscar Remota"
-            idRemotaBusca = 1; // Resetar para ID 1
-            irParaTela(TipoTela::BUSCAR_REMOTA);
         } else {
             // Selecionou "Voltar"
             irParaTela(TipoTela::INICIO);
-        }
-    }
-}
-
-void GerenciadorTelas::navegarBuscarRemota() {
-    if (Botoes::cimaPressionado()) {
-        idRemotaBusca = (idRemotaBusca % MAX_REMOTAS) + 1; // Cicla de 1 a 6
-        precisaRedraw = true;
-    }
-    else if (Botoes::baixoPressionado()) {
-        idRemotaBusca = ((idRemotaBusca - 2 + MAX_REMOTAS) % MAX_REMOTAS) + 1; // Cicla de 6 a 1
-        precisaRedraw = true;
-    }
-    else if (Botoes::enterPressionado()) {
-        // Buscar a remota pelo ID
-        bool encontrada = false;
-        for (int i = 0; i < estadoSistema.numRemotas; i++) {
-            if (estadoSistema.remotas[i].id == idRemotaBusca) {
-                indiceRemotaAtual = i;
-                encontrada = true;
-                irParaTela(TipoTela::REMOTA_ESPECIFICA);
-                break;
-            }
-        }
-
-        if (!encontrada) {
-            // Se não encontrou, criar a remota automaticamente
-            estadoSistema.adicionarRemota(idRemotaBusca);
-            // Encontrar o índice da remota recém-adicionada
-            for (int i = 0; i < estadoSistema.numRemotas; i++) {
-                if (estadoSistema.remotas[i].id == idRemotaBusca) {
-                    indiceRemotaAtual = i;
-                    break;
-                }
-            }
-            estadoSistema.salvarConfiguracao();
-            irParaTela(TipoTela::REMOTA_ESPECIFICA);
         }
     }
 }
@@ -631,8 +531,8 @@ void GerenciadorTelas::irParaTela(TipoTela tela) {
     telaAtual = tela;
     inicioTela = millis();
     resetarSelecao();
-    
-    timeoutHabilitado = (tela == TipoTela::INFO_WIFI || tela == TipoTela::CONFIG_ULTIMO_BOOT);
+
+    timeoutHabilitado = (tela == TipoTela::INFO_WIFI);
     precisaRedraw = true;
 }
 
@@ -680,11 +580,6 @@ void GerenciadorTelas::atualizarTempo() {
     }
 }
 
-void GerenciadorTelas::atualizarTempoBooter(String data, String hora) {
-    dataUltimoBooter = data;
-    horaUltimoBooter = hora;
-}
-
 // =============================================================================
 // VERIFICAÇÕES AUTOMÁTICAS
 // =============================================================================
@@ -726,12 +621,6 @@ void GerenciadorTelas::alternarLuzLcd() {
     precisaRedraw = true;
 }
 
-void GerenciadorTelas::resetarSistema() {
-    if (callbackResetSistema) {
-        callbackResetSistema();
-    }
-}
-
 // =============================================================================
 // GETTERS E SETTERS
 // =============================================================================
@@ -742,10 +631,6 @@ TipoTela GerenciadorTelas::obterTelaAtual() {
 
 bool GerenciadorTelas::estaEmModoEdicao() {
     return estaEditando;
-}
-
-void GerenciadorTelas::definirCallbackResetSistema(void (*callback)()) {
-    callbackResetSistema = callback;
 }
 
 void GerenciadorTelas::definirCallbackAtualizacaoRefeicao(void (*callback)(int, int, int, int, int)) {

@@ -29,27 +29,25 @@ void GerenciadorComunicacao::processarMensagens() {
 void GerenciadorComunicacao::enviarHeartbeat(const char* topicHeartbeat) {
     unsigned long agora = millis();
     if (agora - ultimoHeartbeat >= INTERVALO_HEARTBEAT) {
-        String payload = "{\"status\":\"ALIVE\"" +
-                         String(",\"remota_id\":") + String(REMOTA_ID) +
-                         String(",\"uptime\":") + String(millis()) +
-                         String(",\"wifi_rssi\":") + String(WiFi.RSSI()) +
-                         String(",\"free_heap\":") + String(ESP.getFreeHeap()) +
-                         String(",\"alimentacao_ativa\":") + String(alimentacao->estaAtivo() ? "true" : "false") +
-                         String(",\"servo_travado\":") + String(sistema->getServoTravado() ? "true" : "false") + String("}");
+        // Payload otimizado: reduzido de ~200 para ~60 bytes
+        // Campos: s=status, i=id, r=rssi, a=ativo, t=travado
+        String payload = "{\"s\":1" +  // 1=ALIVE, 0=DEAD
+                         String(",\"i\":") + String(REMOTA_ID) +
+                         String(",\"r\":") + String(WiFi.RSSI()) +
+                         String(",\"a\":") + String(alimentacao->estaAtivo() ? 1 : 0) +
+                         String(",\"t\":") + String(sistema->getServoTravado() ? 1 : 0) + String("}");
 
         if (mqttManager->publicar(topicHeartbeat, payload)) {
             Serial.printf("💓 Heartbeat enviado: ALIVE (remota_id: %d)\n", REMOTA_ID);
         }
 
-        // --- Lógica de alerta de ração ---
+        // --- Lógica de alerta de ração (Payload otimizado) ---
         extern GerenciadorHCSR04 sensorRacao;
         float distancia = sensorRacao.medirDistancia();
-        String alertaPayload;
-        if (distancia >= sensorRacao.getDistanciaLimite()) {
-            alertaPayload = "{\"remota_id\":" + String(REMOTA_ID) + ",\"nivel\":\"BAIXO\",\"distancia\":" + String(distancia) + "}";
-        } else {
-            alertaPayload = "{\"remota_id\":" + String(REMOTA_ID) + ",\"nivel\":\"OK\",\"distancia\":" + String(distancia) + "}";
-        }
+        // Campos: i=id, n=nivel (0=OK, 1=BAIXO), d=distancia
+        String alertaPayload = "{\"i\":" + String(REMOTA_ID) +
+                              ",\"n\":" + String(distancia >= sensorRacao.getDistanciaLimite() ? 1 : 0) +
+                              ",\"d\":" + String(distancia, 1) + "}";  // 1 casa decimal
         mqttManager->publicar(TOPIC_ALERTA_RACAO, alertaPayload);
         // ---
 
@@ -58,16 +56,18 @@ void GerenciadorComunicacao::enviarHeartbeat(const char* topicHeartbeat) {
 }
 
 void GerenciadorComunicacao::enviarStatusMQTT(const char* topicStatus, const String& status) {
-    String payload = "{\"status\":\"" + status + "\",\"timestamp\":" + String(millis()) + "}";
+    // Payload otimizado: s=status, t=timestamp
+    String payload = "{\"s\":\"" + status + "\",\"t\":" + String(millis()) + "}";
     if (mqttManager->publicar(topicStatus, payload)) {
         Serial.printf("📤 Status enviado: %s\n", status.c_str());
     }
 }
 
 void GerenciadorComunicacao::enviarConclusaoMQTT(const char* topicResposta, int tempoDecorrido, const String& comandoId) {
-    String payload = "{\"concluido\":true,\"tempo_segundos\":" + String(tempoDecorrido) +
-                     ",\"comando_id\":\"" + comandoId + "\"" +
-                     ",\"timestamp\":" + String(millis()) + "}";
+    // Payload otimizado: c=concluido, ts=tempo_segundos, id=comando_id, t=timestamp
+    String payload = "{\"c\":1,\"ts\":" + String(tempoDecorrido) +
+                     ",\"id\":\"" + comandoId + "\"" +
+                     ",\"t\":" + String(millis()) + "}";
     if (mqttManager->publicar(topicResposta, payload)) {
         Serial.printf("📤 Conclusão enviada: %d segundos de alimentação [ID: %s]\n", tempoDecorrido, comandoId.c_str());
     }
@@ -108,8 +108,8 @@ void GerenciadorComunicacao::processarComandoCentral(const String& payload) {
         return;
     }
 
-    // Comando alimentar formato JSON
-    if (payload.indexOf("\"acao\":\"alimentar\"") > 0) {
+    // Comando alimentar formato JSON (com ou sem espaços)
+    if (payload.indexOf("\"acao\"") >= 0 && payload.indexOf("\"alimentar\"") >= 0) {
         Serial.println("📥 Comando 'alimentar' recebido da central");
         
         // Extrair tempo (se fornecido)
@@ -159,6 +159,12 @@ void GerenciadorComunicacao::processarComandoCentral(const String& payload) {
         } else {
             Serial.println("❌ Erro: Parâmetro inválido para comando legado");
         }
+        return;
+    }
+
+    // Verificar se é uma mensagem informativa (não é comando)
+    if (payload.indexOf("\"info\"") >= 0 || payload.indexOf("\"nota\"") >= 0) {
+        Serial.println("ℹ️  Mensagem informativa recebida (ignorada)");
         return;
     }
 

@@ -33,12 +33,12 @@ const int MQTT_PORT = 8883;
 const char* MQTT_CLIENT_ID = "ESP32_Remota_001";
 const char* MQTT_USERNAME = "Remota_1";
 const char* MQTT_PASSWORD = "Senha1234";
-// ===== TÓPICOS MQTT =====
-const char* TOPIC_COMANDO = "alimentador/remota/comando";
-const char* TOPIC_STATUS = "alimentador/remota/status";
-const char* TOPIC_RESPOSTA = "alimentador/remota/resposta";
-const char* TOPIC_HEARTBEAT = "alimentador/remota/heartbeat";
-const char* TOPIC_ALERTA_RACAO = "alimentador/remota/alerta_racao";
+// ===== TÓPICOS MQTT (Otimizados para reduzir uso de memória) =====
+const char* TOPIC_COMANDO = "a/r/cmd";      // alimentador/remota/comando -> a/r/cmd
+const char* TOPIC_STATUS = "a/r/st";         // alimentador/remota/status -> a/r/st
+const char* TOPIC_RESPOSTA = "a/r/rsp";      // alimentador/remota/resposta -> a/r/rsp
+const char* TOPIC_HEARTBEAT = "a/r/hb";      // alimentador/remota/heartbeat -> a/r/hb
+const char* TOPIC_ALERTA_RACAO = "a/r/alr";  // alimentador/remota/alerta_racao -> a/r/alr
 
 // ===== CONFIGURAÇÃO DO HARDWARE =====
 const int PINO_SERVO = 5;
@@ -52,7 +52,7 @@ const float DISTANCIA_LIMITE_RACAO = 5.0; // cm - quando ração está baixa
 const unsigned long INTERVALO_MONITORAMENTO_RACAO = 300000; // 5 minutos (300 segundos)
 
 // ===== CONFIGURAÇÕES DE HEARTBEAT =====
-const unsigned long INTERVALO_HEARTBEAT = 300000; // 5 minutos (300 segundos)
+const unsigned long INTERVALO_HEARTBEAT = 30000; // 10 segundos (latência reduzida)
 
 // ===== CONFIGURAÇÕES GERAIS =====
 const unsigned long SERIAL_BAUD_RATE = 115200;

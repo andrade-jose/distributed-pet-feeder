@@ -41,7 +41,29 @@ void setup()
     GerenciadorMQTT::inicializar();  // ✅ Isso cria a instância
     GerenciadorTelas::inicializar();
     ControladorAlimentacao::inicializar();
-    
+
+    // Registrar callback para quando o LCD alterar uma refeição
+    GerenciadorTelas::definirCallbackAtualizacaoRefeicao([](int idRemota, int indiceRefeicao, int hora, int minuto, int quantidade) {
+        Serial.printf("[CALLBACK] LCD alterou: Remota %d, Refeição %d → %02d:%02d (%dg)\n",
+                     idRemota, indiceRefeicao, hora, minuto, quantidade);
+
+        GerenciadorMQTT* mqtt = GerenciadorMQTT::obterInstancia();
+        if (mqtt && mqtt->estaConectado()) {
+            // Enviar para a remota
+            mqtt->configurarHorarioRefeicao(idRemota, indiceRefeicao, hora, minuto, quantidade);
+
+            // Notificar dashboards da mudança (origem = "l" de LCD)
+            mqtt->notificarMudancaConfig(idRemota, indiceRefeicao, hora, minuto, quantidade, "l");
+
+            // Publicar estado completo atualizado (com retain)
+            mqtt->publicarEstadoCompleto(idRemota);
+
+            Serial.println("[CALLBACK] Configuração publicada via MQTT");
+        } else {
+            Serial.println("[CALLBACK] MQTT não conectado, configuração não publicada");
+        }
+    });
+
     Serial.println("Sistema pronto!");
 }
 

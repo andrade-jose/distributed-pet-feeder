@@ -4,7 +4,9 @@
       "Bash(cat:*)",
       "Read(//c/Users/ALEXANDRE/Desktop/Projeto Alimentador/distributed-pet-feeder/central-feeder/**)",
       "Bash(pio run:*)",
-      "Bash(platformio run:*)"
+      "Bash(platformio run:*)",
+      "Bash(python -m platformio run:*)",
+      "Read(//c/Users/ALEXANDRE/OneDrive/Área de Trabalho/Projeto Alimentador/distributed-pet-feeder/central-feeder-hiveMQ/**)"
     ],
     "deny": [],
     "ask": []

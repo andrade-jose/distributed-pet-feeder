@@ -51,6 +51,7 @@ struct EstadoSistema {
     void atualizarRemota(int id, bool conectada, bool online, String nivelRacao = "");
     void adicionarRemota(int id);
     bool remotaConectada(int id);
+    bool remotaAtivaRecente(int id); // Verifica se teve sinal nos últimos 10 minutos
     void verificarTimeouts();
     void marcarRefeicoesModificadas();
     bool verificarELimparFlagRefeicoes();

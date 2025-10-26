@@ -9,7 +9,9 @@ public:
     static void processarStatus(String mensagem, int remotaId);
     static void processarHeartbeat(String mensagem, int remotaId);
     static void processarAlerta(String mensagem, int remotaId);
-    
+    static void processarConfiguracaoDashboard(String mensagem); // NOVO
+    static void processarSolicitacaoConfig(String mensagem); // NOVO
+
 private:
     static int extrairIdRemota(String topico);
     static String extrairTipoTopico(String topico);

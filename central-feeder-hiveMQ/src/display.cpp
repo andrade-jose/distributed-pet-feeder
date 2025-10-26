@@ -1,11 +1,15 @@
 #include "display.h"
 #include <Arduino.h>
+#include <Wire.h>
 
 // Inicializar LCD estático
 LiquidCrystal_I2C Display::lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS);
 
 void Display::init()
 {
+    DEBUG_PRINTLN("=== Inicializando Display LCD ===");
+
+    // Inicializar o LCD diretamente
     lcd.init();
     lcd.backlight();
     lcd.clear();

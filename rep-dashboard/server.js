@@ -18,8 +18,9 @@ app.use(helmet({
         directives: {
             defaultSrc: ["'self'"],
             scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+            scriptSrcAttr: ["'unsafe-inline'"], // Permite onclick, onsubmit, etc
             styleSrc: ["'self'", "'unsafe-inline'"],
-            connectSrc: ["'self'", "wss://*.hivemq.cloud"],
+            connectSrc: ["'self'", "wss://*.hivemq.cloud", "wss://56d05fe4fbc64e80964aa78d92456f22.s1.eu.hivemq.cloud"],
             imgSrc: ["'self'", "data:", "https:"],
         }
     }

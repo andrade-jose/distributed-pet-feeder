@@ -1,16 +1,20 @@
 services:
   - type: web
     name: pet-feeder-dashboard
-    env: static
-    buildCommand: ""
-    staticPublishPath: ./
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: public, max-age=3600
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: MQTT_HOST
+        sync: false
+      - key: MQTT_PORT
+        sync: false
+      - key: MQTT_USERNAME
+        sync: false
+      - key: MQTT_PASSWORD
+        sync: false

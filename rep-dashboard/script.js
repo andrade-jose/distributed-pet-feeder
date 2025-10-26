@@ -22,12 +22,7 @@ const TOPICS = {
     alerta_legacy: 'alimentador/remota/alerta_racao'
 };
 
-// Usuários e permissões
-const USERS = {
-    'operador': { password: 'operador123', role: 'operador' },
-    'dev': { password: 'dev123', role: 'dev' },
-    'admin': { password: 'admin123', role: 'dev' }
-};
+// REMOVIDO: Autenticação agora é feita no servidor de forma segura
 
 // ================================================
 
@@ -38,9 +33,10 @@ let feedersData = {};
 let connectionAttempts = 0;
 const MAX_CONNECTION_ATTEMPTS = 5;
 
-// Funções de autenticação
-function login() {
-    const username = document.getElementById('username').value;
+// ========== FUNÇÕES DE AUTENTICAÇÃO SEGURA ==========
+
+async function login() {
+    const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
     const role = document.getElementById('role').value;
     const rememberPassword = document.getElementById('rememberPassword').checked;
@@ -50,28 +46,36 @@ function login() {
         return;
     }
 
-    // Verificar credenciais
-    if (USERS[username] && USERS[username].password === password) {
-        // Verificar se o tipo de acesso selecionado corresponde ao usuário
-        if (USERS[username].role !== role) {
-            showToast('Tipo de acesso não permitido para este usuário', 'error');
+    try {
+        // Enviar credenciais para o servidor
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username, password, role })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            showToast(data.error || 'Erro ao fazer login', 'error');
             return;
         }
 
+        // Login bem-sucedido
         currentUser = {
-            username: username,
-            role: role
+            username: data.user.username,
+            role: data.user.role
         };
 
-        // Salvar credenciais se "Lembrar senha" estiver marcado
+        // Salvar apenas o username se "Lembrar senha" estiver marcado
+        // NUNCA salvar senha no localStorage!
         if (rememberPassword) {
             localStorage.setItem('savedUsername', username);
-            localStorage.setItem('savedPassword', password);
             localStorage.setItem('savedRole', role);
         } else {
-            // Limpar credenciais salvas
             localStorage.removeItem('savedUsername');
-            localStorage.removeItem('savedPassword');
             localStorage.removeItem('savedRole');
         }
 
@@ -93,50 +97,91 @@ function login() {
         addLog('Sistema', `Usuário ${username} logou como ${role}`);
         showToast(`Bem-vindo, ${username}!`, 'success');
 
-        // Conectar ao MQTT se for desenvolvedor
+        // Carregar configuração MQTT e conectar se for desenvolvedor
         if (role === 'dev') {
+            await loadMQTTConfig();
             connectMQTT();
         }
-    } else {
-        showToast('Credenciais inválidas', 'error');
+    } catch (error) {
+        console.error('Erro no login:', error);
+        showToast('Erro ao conectar com o servidor', 'error');
     }
 }
 
-// Carregar credenciais salvas ao iniciar
+// Carregar configuração MQTT do servidor (apenas para devs autenticados)
+async function loadMQTTConfig() {
+    if (!currentUser || currentUser.role !== 'dev') {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/mqtt-config', {
+            method: 'GET',
+            credentials: 'include' // Incluir cookies de sessão
+        });
+
+        if (!response.ok) {
+            throw new Error('Não foi possível obter configuração MQTT');
+        }
+
+        MQTT_CONFIG = await response.json();
+        addLog('Sistema', '🔒 Configuração MQTT carregada com segurança');
+    } catch (error) {
+        console.error('Erro ao carregar MQTT config:', error);
+        addLog('Erro', 'Falha ao carregar configuração MQTT', 'error');
+        showToast('Erro ao carregar configuração MQTT', 'error');
+    }
+}
+
+// Carregar credenciais salvas ao iniciar (APENAS username, nunca senha!)
 function loadSavedCredentials() {
     const savedUsername = localStorage.getItem('savedUsername');
-    const savedPassword = localStorage.getItem('savedPassword');
     const savedRole = localStorage.getItem('savedRole');
 
-    if (savedUsername && savedPassword && savedRole) {
+    if (savedUsername && savedRole) {
         document.getElementById('username').value = savedUsername;
-        document.getElementById('password').value = savedPassword;
         document.getElementById('role').value = savedRole;
         document.getElementById('rememberPassword').checked = true;
     }
 }
 
-function logout() {
+async function logout() {
     if (client && client.connected) {
         disconnectMQTT();
     }
-    
-    addLog('Sistema', `Usuário ${currentUser.username} fez logout`);
+
+    const username = currentUser ? currentUser.username : 'Usuário';
+    addLog('Sistema', `${username} fez logout`);
+
+    try {
+        // Notificar o servidor
+        await fetch('/api/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+    } catch (error) {
+        console.error('Erro ao fazer logout no servidor:', error);
+    }
+
     currentUser = null;
-    
-    // Resetar interface
-    document.getElementById('username').value = '';
+    MQTT_CONFIG = null; // Limpar configuração MQTT
+
+    // Resetar interface (não limpar username se "lembrar senha" estiver marcado)
+    const rememberPassword = document.getElementById('rememberPassword').checked;
+    if (!rememberPassword) {
+        document.getElementById('username').value = '';
+        document.getElementById('role').value = 'operador';
+    }
     document.getElementById('password').value = '';
-    document.getElementById('role').value = 'operador';
-    
+
     // Mostrar login e esconder dashboard
     document.getElementById('loginModal').classList.remove('hidden');
     document.getElementById('dashboard').style.display = 'none';
-    
+
     // Limpar dados dos alimentadores
     feedersData = {};
     document.getElementById('feedersGrid').innerHTML = '';
-    
+
     showToast('Logout realizado com sucesso', 'info');
 }
 
@@ -147,26 +192,46 @@ function connectMQTT() {
         return;
     }
 
+    if (!MQTT_CONFIG) {
+        showToast('Configuração MQTT não carregada. Tente fazer login novamente.', 'error');
+        return;
+    }
+
     if (client && client.connected) {
         showToast('Já conectado ao MQTT', 'info');
         return;
     }
 
     const url = `wss://${MQTT_CONFIG.host}:${MQTT_CONFIG.port}/mqtt`;
-    
-    addLog('Sistema', `Conectando a ${MQTT_CONFIG.host}...`);
+
+    addLog('Sistema', `Conectando a ${MQTT_CONFIG.host}:${MQTT_CONFIG.port}...`);
+    addLog('Debug', `URL: ${url}`, 'info');
+    addLog('Debug', `ClientID: ${MQTT_CONFIG.clientId}`, 'info');
     updateConnectionButtons(true, false);
 
-    client = mqtt.connect(url, {
-        username: MQTT_CONFIG.username,
-        password: MQTT_CONFIG.password,
-        clientId: MQTT_CONFIG.clientId,
-        reconnectPeriod: 5000,
-        connectTimeout: 10000
+    try {
+        client = mqtt.connect(url, {
+            username: MQTT_CONFIG.username,
+            password: MQTT_CONFIG.password,
+            clientId: MQTT_CONFIG.clientId,
+            reconnectPeriod: 5000,
+            connectTimeout: 30000,
+            keepalive: 60,
+            clean: true,
+            protocolVersion: 4
+        });
+    } catch (error) {
+        addLog('Erro', `Falha ao criar cliente MQTT: ${error.message}`, 'error');
+        updateConnectionButtons(false, false);
+        return;
+    }
+
+    client.on('message', (topic, message) => {
+        handleMQTTMessage(topic, message.toString());
     });
 
-    client.on('connect', () => {
-        addLog('Sistema', '✅ Conectado ao MQTT!');
+    client.on('connect', (connack) => {
+        addLog('Sistema', `✅ Conectado ao MQTT! (Session: ${connack.sessionPresent})`, 'info');
         updateMQTTStatus(true);
         connectionAttempts = 0;
         updateConnectionButtons(false, true);
@@ -185,24 +250,31 @@ function connectMQTT() {
 
         addLog('Sistema', '📥 Inscrito em 8 tópicos (4 novos + 4 legados)');
 
-        // Solicitar status inicial (não necessário com retain, mas força refresh)
+        // Solicitar status inicial
         requestStatusAll();
 
         showToast('Conectado ao MQTT com sucesso!', 'success');
     });
 
-    client.on('message', (topic, message) => {
-        handleMQTTMessage(topic, message.toString());
-    });
-
     client.on('error', (error) => {
-        addLog('Erro', error.message, 'error');
+        console.error('MQTT Error:', error);
+        addLog('Erro MQTT', `${error.message || error}`, 'error');
+
+        // Detalhes adicionais
+        if (error.code) {
+            addLog('Erro', `Código: ${error.code}`, 'error');
+        }
+        if (error.errno) {
+            addLog('Erro', `Errno: ${error.errno}`, 'error');
+        }
+
         updateMQTTStatus(false);
         updateConnectionButtons(false, false);
-        
+
         connectionAttempts++;
         if (connectionAttempts >= MAX_CONNECTION_ATTEMPTS) {
             showToast(`Falha na conexão após ${MAX_CONNECTION_ATTEMPTS} tentativas`, 'error');
+            client.end(true); // Forçar desconexão
         }
     });
 
@@ -212,8 +284,19 @@ function connectMQTT() {
         updateConnectionButtons(false, false);
     });
 
+    client.on('offline', () => {
+        addLog('Sistema', '📡 Cliente MQTT offline', 'warning');
+    });
+
     client.on('reconnect', () => {
-        addLog('Sistema', '🔄 Tentando reconectar...', 'warning');
+        connectionAttempts++;
+        addLog('Sistema', `🔄 Tentando reconectar (${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS})...`, 'warning');
+
+        if (connectionAttempts >= MAX_CONNECTION_ATTEMPTS) {
+            addLog('Erro', 'Máximo de tentativas atingido. Parando reconexão.', 'error');
+            client.end(true);
+            showToast('Falha ao conectar ao MQTT. Verifique as credenciais.', 'error');
+        }
     });
 }
 
@@ -721,7 +804,7 @@ setInterval(() => {
 }, 5000);
 
 // Funções para envio manual de mensagens MQTT
-function sendManualMQTT() {
+async function sendManualMQTT() {
     if (!client || !client.connected) {
         showToast('Erro: MQTT desconectado', 'error');
         return;
@@ -745,22 +828,40 @@ function sendManualMQTT() {
         return;
     }
 
-    // Validar JSON se parecer ser JSON (começa com { ou [)
-    if (messageText.startsWith('{') || messageText.startsWith('[')) {
-        try {
-            JSON.parse(messageText);
-        } catch (e) {
-            showToast('Erro: Mensagem JSON inválida', 'error');
+    try {
+        // Validar mensagem no servidor antes de enviar
+        const validationResponse = await fetch('/api/validate-mqtt-message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify({ topic, message: messageText })
+        });
+
+        const validationData = await validationResponse.json();
+
+        if (!validationResponse.ok) {
+            showToast(validationData.error || 'Mensagem inválida', 'error');
             return;
         }
-    }
 
-    // Enviar mensagem
-    try {
+        // Validação local adicional para JSON
+        if (messageText.startsWith('{') || messageText.startsWith('[')) {
+            try {
+                JSON.parse(messageText);
+            } catch (e) {
+                showToast('Erro: Mensagem JSON inválida', 'error');
+                return;
+            }
+        }
+
+        // Enviar mensagem
         client.publish(topic, messageText);
         addLog('Manual', `📤 Enviado para ${topic}: ${messageText.substring(0, 50)}...`);
         showToast('Mensagem enviada com sucesso!', 'success');
     } catch (error) {
+        console.error('Erro ao enviar mensagem:', error);
         addLog('Erro', `Falha ao enviar mensagem: ${error.message}`, 'error');
         showToast('Erro ao enviar mensagem', 'error');
     }

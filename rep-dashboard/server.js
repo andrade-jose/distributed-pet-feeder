@@ -26,19 +26,19 @@ app.use((req, res, next) => {
     next();
 });
 
-// Helmet para headers de segurança
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
-            scriptSrcAttr: ["'unsafe-inline'"], // Permite onclick, onsubmit, etc
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            connectSrc: ["'self'", "wss://*.hivemq.cloud", "wss://56d05fe4fbc64e80964aa78d92456f22.s1.eu.hivemq.cloud"],
-            imgSrc: ["'self'", "data:", "https:"],
-        }
-    }
-}));
+// Helmet para headers de segurança (desabilitado temporariamente para debug)
+// app.use(helmet({
+//     contentSecurityPolicy: {
+//         directives: {
+//             defaultSrc: ["'self'"],
+//             scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+//             scriptSrcAttr: ["'unsafe-inline'"], // Permite onclick, onsubmit, etc
+//             styleSrc: ["'self'", "'unsafe-inline'"],
+//             connectSrc: ["'self'", "wss://*.hivemq.cloud", "wss://56d05fe4fbc64e80964aa78d92456f22.s1.eu.hivemq.cloud"],
+//             imgSrc: ["'self'", "data:", "https:"],
+//         }
+//     }
+// }));
 
 // Rate limiting para prevenir ataques de força bruta
 const loginLimiter = rateLimit({
@@ -112,11 +112,16 @@ function requireDev(req, res, next) {
 
 // Login
 app.post('/api/login', loginLimiter, async (req, res) => {
+    console.log('=== LOGIN REQUEST ===');
+    console.log('Body:', req.body);
+    console.log('Headers:', req.headers);
+
     try {
         const { username, password, role } = req.body;
 
         // Validação básica
         if (!username || !password || !role) {
+            console.log('ERRO: Campos faltando');
             return res.status(400).json({ error: 'Campos obrigatórios faltando' });
         }
 
@@ -143,13 +148,16 @@ app.post('/api/login', loginLimiter, async (req, res) => {
             role: user.role
         };
 
-        res.json({
+        const responseData = {
             success: true,
             user: {
                 username,
                 role: user.role
             }
-        });
+        };
+
+        console.log('Enviando resposta:', responseData);
+        res.json(responseData);
     } catch (error) {
         console.error('Erro no login:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });

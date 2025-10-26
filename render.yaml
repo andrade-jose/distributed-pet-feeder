@@ -2,6 +2,7 @@ services:
   - type: web
     name: pet-feeder-dashboard
     env: node
+    rootDir: rep-dashboard
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /

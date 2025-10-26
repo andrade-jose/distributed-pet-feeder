@@ -2,6 +2,11 @@
 // IMPORTANTE: As credenciais MQTT agora são obtidas do servidor de forma segura
 let MQTT_CONFIG = null; // Será carregado após autenticação
 
+// URL da API (automaticamente detecta se está local ou em produção)
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : window.location.origin;
+
 // Tópicos MQTT - OTIMIZADOS (compatíveis com Central ESP32)
 const TOPICS = {
     // Tópicos de operação (remotas)
@@ -48,13 +53,19 @@ async function login() {
 
     try {
         // Enviar credenciais para o servidor
-        const response = await fetch('/api/login', {
+        const response = await fetch(`${API_URL}/api/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ username, password, role })
         });
+
+        // Verificar se a resposta tem conteúdo
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Servidor não retornou JSON válido. Verifique se o servidor está rodando corretamente.');
+        }
 
         const data = await response.json();
 
@@ -115,7 +126,7 @@ async function loadMQTTConfig() {
     }
 
     try {
-        const response = await fetch('/api/mqtt-config', {
+        const response = await fetch(`${API_URL}/api/mqtt-config`, {
             method: 'GET',
             credentials: 'include' // Incluir cookies de sessão
         });
@@ -155,7 +166,7 @@ async function logout() {
 
     try {
         // Notificar o servidor
-        await fetch('/api/logout', {
+        await fetch(`${API_URL}/api/logout`, {
             method: 'POST',
             credentials: 'include'
         });
@@ -830,7 +841,7 @@ async function sendManualMQTT() {
 
     try {
         // Validar mensagem no servidor antes de enviar
-        const validationResponse = await fetch('/api/validate-mqtt-message', {
+        const validationResponse = await fetch(`${API_URL}/api/validate-mqtt-message`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

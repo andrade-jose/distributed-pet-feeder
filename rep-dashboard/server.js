@@ -5,12 +5,19 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const cors = require('cors');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ========== CONFIGURAÇÕES DE SEGURANÇA ==========
+
+// CORS - Permitir requisições de qualquer origem (necessário para Render.com)
+app.use(cors({
+    origin: true, // Permite qualquer origem
+    credentials: true // Permite envio de cookies
+}));
 
 // Helmet para headers de segurança
 app.use(helmet({

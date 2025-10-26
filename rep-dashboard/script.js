@@ -2,10 +2,7 @@
 // IMPORTANTE: As credenciais MQTT agora são obtidas do servidor de forma segura
 let MQTT_CONFIG = null; // Será carregado após autenticação
 
-// URL da API (automaticamente detecta se está local ou em produção)
-const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
+// API_URL é definido em config.js
 
 // Tópicos MQTT - OTIMIZADOS (compatíveis com Central ESP32)
 const TOPICS = {

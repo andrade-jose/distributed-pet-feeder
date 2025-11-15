@@ -15,7 +15,8 @@
       "Bash(~/.platformio/penv/Scripts/platformio run --target upload --environment esp32dev --upload-port COM4)",
       "Bash(~/.platformio/penv/Scripts/platformio device monitor --port COM4 --baud 115200)",
       "Read(//c/Users/ALEXANDRE/OneDrive/Área de Trabalho/Projeto Alimentador/distributed-pet-feeder/rep-dashboard/**)",
-      "Read(//c/Users/ALEXANDRE/OneDrive/Área de Trabalho/Projeto Alimentador/distributed-pet-feeder/remote - feeder/**)"
+      "Read(//c/Users/ALEXANDRE/OneDrive/Área de Trabalho/Projeto Alimentador/distributed-pet-feeder/remote - feeder/**)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

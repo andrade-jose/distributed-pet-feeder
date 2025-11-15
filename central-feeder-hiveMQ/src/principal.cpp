@@ -1,79 +1,64 @@
-// principal.cpp
-#include <Arduino.h>
-#include "config.h"
-#include "botoes.h"
-#include "display.h"
-#include "gerenciador_tempo.h"
-#include "gerenciador_wifi.h"
-#include "gerenciador_mqtt.h"
-#include "gerenciador_telas.h"
-#include "controlador_alimentacao.h"
-#include "sistema_estado.h"
+#include <WiFi.h>
+#include <WireGuard-ESP32.h>
+#include <PubSubClient.h>
 
-#define VERSAO SYSTEM_VERSION
+const char* ssid = "SEU_WIFI";
+const char* password = "SENHA_WIFI";
 
-// ✅ CORREÇÃO: Usar pointer (declaração consistente)
-extern GerenciadorMQTT* gerenciadorMQTT;
-extern EstadoSistema estadoSistema;
+// MQTT (dentro da VPN) 
+const char* mqttServer = "10.8.0.1"; // IP do broker dentro da rede WireGuard
+const int mqttPort = 1883;
 
-void setup() 
-{
-    Serial.begin(115200);
-    delay(2000);  // Aguarda 2 segundos para estabilizar
-    
-    Serial.println("\n\n========================================");
-    Serial.println("ESP32 INICIADO COM SUCESSO!");
-    Serial.println("========================================");
-    Serial.print("Versao do Firmware: ");
-    Serial.println(__DATE__ " " __TIME__);
-    Serial.println("Iniciando setup...");
-    
-    // Resto do seu código setup aqui...
-    
-    Serial.println("=== Inicializando Sistema Cliente MQTT ===");
-    Serial.printf("Versão: %s\n", VERSAO);
-    Serial.printf("Build: %s %s\n", __DATE__, __TIME__);
+// --- Configuração WireGuard (.conf convertido)
+const char* privateKey = "GIWQpwolXZWPdNzdb2rQRgdLOE65UpWbhcwIhJ3PQEA=";
+const char* peerPublicKey = "9HHOHLHoYfIC9ixiTZ6whj6Zhn9saPzBXTjpNP0DEwQ=";
+const char* presharedKey = "ju6bZca6sq8JpIJyu024tRM/bSpospe1yWwZXbkTYhI=";
+const char* peerEndpoint = "192.168.15.36"; // pode usar IP público se resolver mal DNS
+const uint16_t peerPort = 51820;
+const char* allowedIPs = "0.0.0.0/0";
+IPAddress local_ip(10, 8, 0, 2);
+IPAddress subnet_mask(255, 255, 255, 0);
 
-    Botoes::inicializar();
-    Display::init();
-    GerenciadorTempo::inicializar();
-    GerenciadorWiFi::inicializar();
-    GerenciadorMQTT::inicializar();  // ✅ Isso cria a instância
-    GerenciadorTelas::inicializar();
-    ControladorAlimentacao::inicializar();
+WireGuard wg;
+WiFiClient wgClient;
+PubSubClient mqtt(wgClient);
 
-    // Registrar callback para quando o LCD alterar uma refeição
-    GerenciadorTelas::definirCallbackAtualizacaoRefeicao([](int idRemota, int indiceRefeicao, int hora, int minuto, int quantidade) {
-        Serial.printf("[CALLBACK] LCD alterou: Remota %d, Refeição %d → %02d:%02d (%dg)\n",
-                     idRemota, indiceRefeicao, hora, minuto, quantidade);
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  Serial.println("\nConectando ao Wi-Fi...");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWi-Fi conectado!");
 
-        GerenciadorMQTT* mqtt = GerenciadorMQTT::obterInstancia();
-        if (mqtt && mqtt->estaConectado()) {
-            // Enviar para a remota
-            mqtt->configurarHorarioRefeicao(idRemota, indiceRefeicao, hora, minuto, quantidade);
+  // Inicializa WireGuard
+  Serial.println("Iniciando túnel WireGuard...");
+  wg.begin(
+    local_ip,
+    privateKey,
+    peerPublicKey,
+    peerEndpoint,
+    peerPort,
+    allowedIPs,
+    subnet_mask,
+    presharedKey
+  );
+  Serial.println("WireGuard ativo! Conectado à VPN.");
 
-            // Notificar dashboards da mudança (origem = "l" de LCD)
-            mqtt->notificarMudancaConfig(idRemota, indiceRefeicao, hora, minuto, quantidade, "l");
-
-            // Publicar estado completo atualizado (com retain)
-            mqtt->publicarEstadoCompleto(idRemota);
-
-            Serial.println("[CALLBACK] Configuração publicada via MQTT");
-        } else {
-            Serial.println("[CALLBACK] MQTT não conectado, configuração não publicada");
-        }
-    });
-
-    Serial.println("Sistema pronto!");
+  // Testa conexão MQTT dentro da VPN
+  mqtt.setServer(mqttServer, mqttPort);
+  Serial.print("Conectando ao broker MQTT dentro da VPN...");
+  if (mqtt.connect("ESP32-WG")) {
+    Serial.println(" conectado!");
+    mqtt.publish("vpn/teste", "WireGuard + MQTT ativo!");
+  } else {
+    Serial.println(" falha!");
+  }
 }
 
 void loop() {
-    GerenciadorTempo::atualizar();
-    GerenciadorWiFi::atualizar();
-    GerenciadorMQTT::atualizar();
-    estadoSistema.verificarTimeouts();
-    GerenciadorTelas::atualizar();
-    ControladorAlimentacao::atualizar();
-
-    delay(100);
+  mqtt.loop();
 }

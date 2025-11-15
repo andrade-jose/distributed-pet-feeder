@@ -1,29 +1,31 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// ===== CERTIFICADO SSL - HIVEMQ =====
-extern const char* HIVEMQ_ROOT_CA;
-
 // ===== CONFIGURAÇÃO WIFI =====
 #define DEFAULT_WIFI_SSID "Coelhoandrade"
 #define DEFAULT_WIFI_PASSWORD "190520jg"
 
 // ===== CONFIGURAÇÃO DA REMOTA =====
 extern const int REMOTA_ID;
+extern const char* DEVICE_ID;  // "REMOTA_1", "REMOTA_2", etc.
 
-// ===== CONFIGURAÇÃO MQTT - HIVEMQ =====
+// ===== CONFIGURAÇÃO MQTT - MOSQUITTO UMBREL =====
 extern const char* MQTT_SERVER;
 extern const int MQTT_PORT;
 extern const char* MQTT_CLIENT_ID;
 extern const char* MQTT_USERNAME;
 extern const char* MQTT_PASSWORD;
 
-// ===== TÓPICOS MQTT =====
-extern const char* TOPIC_COMANDO;
-extern const char* TOPIC_STATUS;
-extern const char* TOPIC_RESPOSTA;
-extern const char* TOPIC_HEARTBEAT;
-extern const char* TOPIC_ALERTA_RACAO;
+// ===== SPARKPLUG B NAMESPACE =====
+extern const char* SPARKPLUG_NAMESPACE;
+extern const char* GROUP_ID;
+extern const char* EDGE_NODE_ID;
+
+// ===== TÓPICOS MQTT SPARKPLUG B =====
+extern const char* TOPIC_DBIRTH;
+extern const char* TOPIC_DDATA;
+extern const char* TOPIC_DDEATH;
+extern const char* TOPIC_DCMD;
 
 // ===== CONFIGURAÇÃO DO HARDWARE =====
 extern const int PINO_SERVO;

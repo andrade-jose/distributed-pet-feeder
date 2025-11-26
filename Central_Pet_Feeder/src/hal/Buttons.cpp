@@ -20,9 +20,8 @@ void Buttons::init() {
     initButton(btnUp, BTN_UP_PIN);
     initButton(btnDown, BTN_DOWN_PIN);
     initButton(btnOk, BTN_OK_PIN);
-    initButton(btnBack, BTN_BACK_PIN);
 
-    Serial.println("[Buttons] Botões inicializados");
+    Serial.println("[Buttons] Botões inicializados (UP, DOWN, OK)");
 }
 
 bool Buttons::updateButton(ButtonState& btn) {
@@ -58,7 +57,6 @@ void Buttons::update() {
     updateButton(btnUp);
     updateButton(btnDown);
     updateButton(btnOk);
-    updateButton(btnBack);
 }
 
 ButtonEvent Buttons::getEvent() {
@@ -75,10 +73,6 @@ ButtonEvent Buttons::getEvent() {
     if (btnOk.pressed) {
         btnOk.pressed = false;
         return ButtonEvent::OK;
-    }
-    if (btnBack.pressed) {
-        btnBack.pressed = false;
-        return ButtonEvent::BACK;
     }
 
     return ButtonEvent::NONE;

@@ -102,6 +102,32 @@ void onMQTTMessage(const String& topic, const String& payload) {
         return;
     }
 
+    // ========== LOGS OFFLINE DAS REMOTAS ==========
+    // Tópico: petfeeder/logs
+    if (topic == MQTT_TOPIC_LOGS) {
+        Serial.println("📥 Log offline recebido da remota:");
+
+        // Extrair informações do log
+        String deviceId = doc["deviceId"] | "";
+        long timestamp = doc["timestamp"] | 0;
+        int quantity = doc["qty"] | 0;
+        bool delivered = doc["delivered"] | false;
+        String source = doc["source"] | "";
+
+        // Log detalhado no Serial
+        Serial.printf("   Device: %s\n", deviceId.c_str());
+        Serial.printf("   Timestamp: %ld\n", timestamp);
+        Serial.printf("   Quantidade: %dg\n", quantity);
+        Serial.printf("   Status: %s\n", delivered ? "✅ Sucesso" : "❌ Falha");
+        Serial.printf("   Origem: %s\n", source.c_str());
+
+        // Repassa para Dashboard (tópico separado para histórico)
+        mqttClient.publish("petfeeder/dashboard/history", payload, false);
+
+        Serial.println("   ↳ Log repassado para Dashboard");
+        return;
+    }
+
     // ========== COMANDOS DO DASHBOARD ==========
     // Tópico: petfeeder/central/cmd
     if (topic == MQTT_TOPIC_CENTRAL_CMD) {
@@ -252,8 +278,16 @@ void initMQTT() {
     mqttClient.configure(MQTT_BROKER_HOST, MQTT_BROKER_PORT,
                          MQTT_USERNAME, MQTT_PASSWORD, MQTT_CLIENT_ID);
 
-    // Configurar TLS com certificado CA
-    mqttClient.setTLSCertificate(MQTT_CA_CERT);
+    // Configurar TLS
+    #if MQTT_USE_TLS
+        #if MQTT_VALIDATE_CERT
+            // Validar certificado (requer NTP sincronizado!)
+            mqttClient.setTLSCertificate(MQTT_ROOT_CA);
+        #else
+            // Modo inseguro - aceita qualquer certificado
+            mqttClient.setTLSCertificate("");
+        #endif
+    #endif
 
     mqttClient.setMessageCallback(onMQTTMessage);
 
@@ -276,6 +310,9 @@ void initMQTT() {
 
         // Inscrever em comandos para a central (do Dashboard)
         mqttClient.subscribe(MQTT_TOPIC_CENTRAL_CMD);
+
+        // Inscrever em logs offline das remotas
+        mqttClient.subscribe(MQTT_TOPIC_LOGS);
 
         // Publicar estado completo inicial para o Dashboard
         publishCentralStateToDA();
@@ -308,11 +345,6 @@ void setup() {
     remoteManager.addRemote(3);
     remoteManager.addRemote(4);
 
-    Serial.println("[CORE] Inicializando ClockService...");
-    if (!clockService.init()) {
-        Serial.println("[CORE] ⚠️ RTC não inicializado, continuando sem hora");
-    }
-
     Serial.println("[CORE] Inicializando ConfigManager...");
     configManager.init();
     configManager.loadAllRemotes();
@@ -335,8 +367,18 @@ void setup() {
     // ===== INICIALIZAR NETWORK =====
 
     initWiFi();
+
+    // ===== INICIALIZAR RELÓGIO (REQUER WIFI) =====
+
     if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("[CORE] Inicializando ClockService (NTP)...");
+        if (!clockService.init()) {
+            Serial.println("[CORE] ⚠️ NTP não inicializado, continuando sem sincronização de hora");
+        }
+
         initMQTT();
+    } else {
+        Serial.println("[CORE] ⚠️ WiFi desconectado, pulando inicialização de NTP e MQTT");
     }
 
     Serial.println("\n✅ SISTEMA INICIADO COM SUCESSO!\n");

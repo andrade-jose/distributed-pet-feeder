@@ -5,8 +5,7 @@ enum class ButtonEvent {
     NONE,
     UP,
     DOWN,
-    OK,
-    BACK
+    OK
 };
 
 class Buttons {
@@ -24,7 +23,6 @@ private:
     ButtonState btnUp;
     ButtonState btnDown;
     ButtonState btnOk;
-    ButtonState btnBack;
 
     void initButton(ButtonState& btn, int pin);
     bool updateButton(ButtonState& btn);
@@ -42,5 +40,4 @@ public:
     bool isUpPressed() { return btnUp.pressed; }
     bool isDownPressed() { return btnDown.pressed; }
     bool isOkPressed() { return btnOk.pressed; }
-    bool isBackPressed() { return btnBack.pressed; }
 };

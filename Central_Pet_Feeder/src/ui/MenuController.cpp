@@ -105,15 +105,29 @@ void MenuController::renderMealConfig() {
     String line2 = "";
     String line3 = "";
 
-    for (int i = 0; i < 3; i++) {
-        String prefix = (i == selectedOption) ? "> " : "  ";
-        String time = formatTime(remote->meals[i].hour, remote->meals[i].minute);
-        String qty = String(remote->meals[i].quantity) + "g";
-        String mealLine = prefix + "R" + String(i + 1) + " " + time + " " + qty;
+    // Mostrar até 3 opções de cada vez (rolagem)
+    int startIdx = selectedOption >= 3 ? selectedOption - 2 : 0;
 
-        if (i == 0) line1 = mealLine;
-        else if (i == 1) line2 = mealLine;
-        else line3 = mealLine;
+    for (int i = 0; i < 3; i++) {
+        int idx = startIdx + i;
+        String* targetLine = (i == 0) ? &line1 : (i == 1) ? &line2 : &line3;
+
+        if (idx >= 4) {  // 3 refeições + 1 "Voltar"
+            *targetLine = "";
+            continue;
+        }
+
+        String prefix = (idx == selectedOption) ? "> " : "  ";
+
+        if (idx < 3) {
+            // Mostrar refeição
+            String time = formatTime(remote->meals[idx].hour, remote->meals[idx].minute);
+            String qty = String(remote->meals[idx].quantity) + "g";
+            *targetLine = prefix + "R" + String(idx + 1) + " " + time + " " + qty;
+        } else {
+            // Opção "Voltar"
+            *targetLine = prefix + "Voltar";
+        }
     }
 
     renderer->render(line0, line1, line2, line3);
@@ -194,24 +208,29 @@ void MenuController::handleRemoteList(ButtonEvent event) {
             selectedOption = 0;
             changeState(MenuState::MEAL_CONFIG);
         } else {
+            // Última opção é "Voltar"
             changeState(MenuState::STATUS_GATEWAY);
         }
-    } else if (event == ButtonEvent::BACK) {
-        changeState(MenuState::STATUS_GATEWAY);
     }
 }
 
 void MenuController::handleMealConfig(ButtonEvent event) {
+    int totalOptions = 4;  // 3 refeições + opção "Voltar"
+
     if (event == ButtonEvent::UP) {
-        selectedOption = (selectedOption - 1 + 3) % 3;
+        selectedOption = (selectedOption - 1 + totalOptions) % totalOptions;
     } else if (event == ButtonEvent::DOWN) {
-        selectedOption = (selectedOption + 1) % 3;
+        selectedOption = (selectedOption + 1) % totalOptions;
     } else if (event == ButtonEvent::OK) {
-        selectedMealIndex = selectedOption;
-        editField = 0;
-        changeState(MenuState::EDIT_TIME);
-    } else if (event == ButtonEvent::BACK) {
-        changeState(MenuState::REMOTE_LIST);
+        if (selectedOption < 3) {
+            // Editar refeição
+            selectedMealIndex = selectedOption;
+            editField = 0;
+            changeState(MenuState::EDIT_TIME);
+        } else {
+            // Opção "Voltar"
+            changeState(MenuState::REMOTE_LIST);
+        }
     }
 }
 
@@ -224,9 +243,8 @@ void MenuController::handleEditTime(ButtonEvent event) {
     if (!isEditing) {
         if (event == ButtonEvent::OK) {
             isEditing = true;
-        } else if (event == ButtonEvent::BACK) {
-            changeState(MenuState::MEAL_CONFIG);
         }
+        // Nota: Para voltar sem editar, avance para a próxima tela e volte de lá
     } else {
         if (event == ButtonEvent::UP) {
             if (editField == 0) {
@@ -261,9 +279,8 @@ void MenuController::handleEditQuantity(ButtonEvent event) {
     if (!isEditing) {
         if (event == ButtonEvent::OK) {
             isEditing = true;
-        } else if (event == ButtonEvent::BACK) {
-            changeState(MenuState::EDIT_TIME);
         }
+        // Usuário deve confirmar ou cancelar com OK
     } else {
         if (event == ButtonEvent::UP) {
             meal.quantity = min(meal.quantity + 10, 500);

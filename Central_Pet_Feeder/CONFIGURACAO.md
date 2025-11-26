@@ -36,7 +36,7 @@ Se você quiser **desabilitar TLS temporariamente** (para testar):
 1. Abra `src/main.cpp`
 2. Encontre a linha:
    ```cpp
-   mqttClient.setTLSCertificate(MQTT_CA_CERT);
+   mqttClient.setTLSCertificate(MQTT_ROOT_CA);
    ```
 3. Troque por:
    ```cpp

@@ -41,7 +41,17 @@ void MQTTClient::setMessageCallback(MQTTMessageCallback callback) {
 void MQTTClient::setTLSCertificate(const char* caCert) {
     if (caCert && strlen(caCert) > 0) {
         wifiClient.setCACert(caCert);
-        Serial.println("[MQTTClient] Certificado TLS configurado");
+        Serial.printf("[MQTTClient] Certificado TLS configurado (%d bytes)\n", strlen(caCert));
+
+        // Debug: Mostrar hora do sistema
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo)) {
+            char buffer[64];
+            strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
+            Serial.printf("[MQTTClient] Hora do sistema: %s\n", buffer);
+        } else {
+            Serial.println("[MQTTClient] ⚠️ AVISO: Não foi possível obter hora do sistema!");
+        }
     } else {
         wifiClient.setInsecure();  // Aceitar qualquer certificado
         Serial.println("[MQTTClient] Modo TLS inseguro (sem validação de certificado)");
@@ -58,7 +68,7 @@ bool MQTTClient::connect() {
         mqttClient = new PubSubClient(wifiClient);
         mqttClient->setServer(brokerHost.c_str(), brokerPort);
         mqttClient->setCallback(staticMQTTCallback);
-        mqttClient->setBufferSize(512);
+        mqttClient->setBufferSize(2048);  // Aumentado para suportar JSON com múltiplas remotas
         mqttClient->setKeepAlive(60);
     }
 

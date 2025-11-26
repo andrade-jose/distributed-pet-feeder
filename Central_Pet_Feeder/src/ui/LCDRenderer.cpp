@@ -1,4 +1,5 @@
 #include "ui/LCDRenderer.h"
+#include <Wire.h>
 
 LCDRenderer::LCDRenderer() {
     lcd = new LiquidCrystal_I2C(LCD_ADDRESS, LCD_COLS, LCD_ROWS);
@@ -7,11 +8,15 @@ LCDRenderer::LCDRenderer() {
 bool LCDRenderer::init() {
     Serial.println("[LCDRenderer] Inicializando display...");
 
+    // Inicializar I2C com os pinos configurados
+    Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
+
     lcd->init();
     lcd->backlight();
     lcd->clear();
 
-    Serial.println("[LCDRenderer] Display inicializado (20x4)");
+    Serial.printf("[LCDRenderer] Display inicializado (20x4) - I2C: SDA=%d, SCL=%d\n",
+                  LCD_SDA_PIN, LCD_SCL_PIN);
     return true;
 }
 

@@ -88,11 +88,11 @@
 // CONFIGURAÇÕES DE REDE
 // =============================================
 // WiFi
-#define WIFI_SSID "Coelho Andrade"
-#define WIFI_PASSWORD "190520jg"
+#define WIFI_SSID "Coloque seu usuario"
+#define WIFI_PASSWORD "Coloque sua senha"
 
 // MQTT com TLS
-#define MQTT_BROKER "200.153.165.39"  // Ou IP
+#define MQTT_BROKER "179.98.138.194"  // Ou IP
 #define MQTT_PORT 8883                // Porta TLS
 #define MQTT_USER "usuario"
 #define MQTT_PASSWORD "senha"
@@ -159,5 +159,6 @@ gCtDmwltHwVs+x7taXl1Gda+MSFulvJCClE8iEJ6T916MzH9OO+w
 #define STATUS_PUBLISH_INTERVAL 60000      // Status a cada 60s
 #define DATA_PUBLISH_INTERVAL 300000       // Telemetria a cada 5min
 #define LOG_SEND_RETRY_INTERVAL 120000     // Retry de logs a cada 2min
+
 
 #endif

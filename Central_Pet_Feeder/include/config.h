@@ -4,8 +4,8 @@
 #define SYSTEM_VERSION "2.0.0-refactored"
 
 // ========== CONFIGURAÇÕES DE WIFI ==========
-#define WIFI_SSID "Coelho Andrade"
-#define WIFI_PASSWORD "190520jg"
+#define WIFI_SSID "Coloque seu usuario"
+#define WIFI_PASSWORD "Coloque sua senha"
 
 // ========== CONFIGURAÇÕES DE NTP ==========
 #define NTP_SERVER "pool.ntp.org"
@@ -14,7 +14,7 @@
 #define NTP_UPDATE_INTERVAL 3600000  // Atualizar a cada 1 hora (em ms)
 
 // ========== CONFIGURAÇÕES DE MQTT ==========
-#define MQTT_BROKER_HOST "200.153.165.39"  // IP do seu servidor Mosquitto
+#define MQTT_BROKER_HOST "179.98.138.194"  // IP do seu servidor Mosquitto
 #define MQTT_BROKER_PORT 8883              // 8883 para TLS, 1883 para sem TLS
 #define MQTT_USERNAME "usuario"
 #define MQTT_PASSWORD "senha"

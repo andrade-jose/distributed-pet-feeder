@@ -1,57 +1,49 @@
-````md
-# 🐾 Alimentador Automático de Pets – Central + Remotas (ESP32 + MQTT)
+# 🐾 Distributed Pet Feeder (ESP32 + MQTT)
 
-Sistema distribuído com ESP32 para alimentação automática de pets, usando arquitetura **Central/Remota** com comunicação **MQTT segura** e controle via **LCD + botões físicos**.
+Este repositório contém a implementação **real** do sistema distribuído com **Central (ESP32)** e **Remota (ESP32)** usando MQTT. O foco aqui é o que está implementado nos diretórios `Central_Pet_Feeder` e `remote - feeder`.
 
-## 🔧 Componentes
+## ✅ O que está implementado
 
-- **Central (ESP32):**
-  - LCD 20x4 com botões UP/DOWN/ENTER
-  - Programação de até 3 refeições por remota
-  - Sincronização automática de hora (NTP)
-  - Monitoramento das remotas em tempo real
+### Central (ESP32) — `Central_Pet_Feeder`
+- Gateway MQTT entre dashboard/controle e as remotas.
+- Protocolo com comandos, status, telemetria e retain.
+- Operação com TLS (certificado CA local em `include/mqtt_cert.h`).
+- Configuração via `include/config.h` (Wi‑Fi e MQTT).
 
-- **Remota (ESP32):**
-  - Servo motor para liberar ração
-  - Sensor Hall para confirmar posição
-  - Botão manual para controle local
-  - Envia status e heartbeat para a central
+Docs principais:
+- `Central_Pet_Feeder/CONFIGURACAO.md`
+- `Central_Pet_Feeder/PROTOCOLO_MQTT.md`
+- `Central_Pet_Feeder/PROTOCOLO_LOGS_OFFLINE.md`
 
-## 🔗 Comunicação
+### Remota (ESP32) — `remote - feeder`
+- Servo para alimentação (0° fechado / 90° aberto).
+- Sensor Hall para confirmação de posição.
+- Botão físico para controle manual (travar/destravar).
+- LED de status + heartbeat MQTT.
+- MQTT com TLS.
 
-- **MQTT Broker:** HiveMQ Cloud (SSL/TLS)
-- **Tópicos principais:**
-  - `alimentador/remota/comando`
-  - `alimentador/remota/status`
-  - `alimentador/remota/heartbeat`
-  - `alimentador/remota/resposta`
+Doc principal:
+- `remote - feeder/README.md`
 
-## 🚀 Como Usar
+## ⚠️ Nota importante sobre tópicos MQTT
 
-1. Clone este repositório:
-   ```bash
-   git clone <url>
-   cd alimentador-automatico
-````
+Os dois módulos **não usam exatamente o mesmo esquema de tópicos**:
+- A Central usa `petfeeder/central/*` e `petfeeder/remote/{id}/*`.
+- A Remota usa `alimentador/remota/*`.
 
-2. Acesse `central/` ou `remota/` e configure Wi-Fi e MQTT em `config.h`.
-3. Compile e envie o código via PlatformIO.
-4. Use o monitor serial para debug e verificação.
+Se você pretende integrar os dois, alinhe os tópicos e o formato das mensagens.
 
-## 📁 Estrutura
+## 🚀 Como começar (resumo)
+
+1) Configure Wi‑Fi e MQTT nos respectivos `config.h`.  
+2) Compile e envie via PlatformIO.  
+3) Use o monitor serial para validar conexão e mensagens.
+
+## 📁 Estrutura relevante
 
 ```
-alimentador-automatico/
-├── central/   → Código da interface e controle
-├── remota/    → Código das unidades físicas
-└── README.md  → Visão geral do projeto
+distributed-pet-feeder/
+├── Central_Pet_Feeder/    # Central (ESP32)
+├── remote - feeder/       # Remota (ESP32)
+└── README.md
 ```
-
-## 📋 Requisitos
-
-* PlatformIO + VS Code
-* Conta no HiveMQ Cloud
-* Placas ESP32 DevKit
-* Acesso à rede Wi-Fi
-
----

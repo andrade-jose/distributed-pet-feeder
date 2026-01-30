@@ -113,7 +113,7 @@ Sistema de central alimentadora ESP32 com interface LCD, conectividade WiFi/MQTT
 // HiveMQ Cloud SSL - Configuração atual funcionando
 Server: 9aa85a8cfb4a4ba896f2289aa408ba5a.s1.eu.hivemq.cloud:8883
 Username: Central
-Password: Senha1234
+Password: SUA_SENHA
 ```
 
 ### **3. Configuração de Refeições:**

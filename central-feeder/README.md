@@ -47,7 +47,7 @@ Edite `include/config.h`:
 #define WIFI_PASSWORD       "Sua_Senha"
 #define MQTT_SERVER         "9aa85a8cfb4a4ba896f2289aa408ba5a.s1.eu.hivemq.cloud"
 #define MQTT_USERNAME       "Central"
-#define MQTT_PASSWORD       "Senha1234"
+#define MQTT_PASSWORD       "SUA_SENHA"
 ```
 
 ### **3. Compilar e Carregar:**

@@ -16,8 +16,8 @@ A **Central** atua como o **controlador principal** que:
 3. Clique em **"Add Credentials"**
 4. Configure:
    ```
-   Username: Central1
-   Password: SenhaC123
+   Username: SEU_USUARIO
+   Password: SUA_SENHA
    ```
 5. Clique em **"Add"**
 
@@ -46,8 +46,8 @@ Edite o arquivo `include/config.h`:
 
 // Credenciais específicas da CENTRAL
 #define MQTT_CLIENT_ID "ESP32_Central_001"          // ID único da central
-#define MQTT_USERNAME "Central1"                    // Usuário específico da central
-#define MQTT_PASSWORD "SenhaC123"                   // Senha específica da central
+#define MQTT_USERNAME "SEU_USUARIO"                    // Usuário específico da central
+#define MQTT_PASSWORD "SUA_SENHA"                   // Senha específica da central
 ```
 
 ## 📡 **4. TÓPICOS MQTT DA CENTRAL**
@@ -112,8 +112,8 @@ Edite o arquivo `include/config.h`:
    ```
    Host: SUA_CLUSTER_URL.hivemq.cloud
    Port: 8884
-   Username: Central1
-   Password: SenhaC123
+   Username: SEU_USUARIO
+   Password: SUA_SENHA
    SSL: ✅ (ativado)
    ```
 

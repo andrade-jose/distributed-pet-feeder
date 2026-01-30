@@ -31,8 +31,8 @@ Migrar a remota de **HiveMQ Cloud (SSL/TLS porta 8883)** para **Broker MQTT Loca
 const char* MQTT_SERVER = "9aa85a8cfb4a4ba896f2289aa408ba5a.s1.eu.hivemq.cloud";
 const int MQTT_PORT = 8883;
 const char* MQTT_CLIENT_ID = "ESP32_Remota_001";
-const char* MQTT_USERNAME = "Romota1";
-const char* MQTT_PASSWORD = "Senha1234";
+const char* MQTT_USERNAME = "SEU_USUARIO";
+const char* MQTT_PASSWORD = "SUA_SENHA";
 ```
 
 #### ✅ **ADICIONAR (código novo Broker Local)**

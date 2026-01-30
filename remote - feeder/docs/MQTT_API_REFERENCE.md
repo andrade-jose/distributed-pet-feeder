@@ -39,8 +39,8 @@ Protocolo: MQTT sobre SSL/TLS
 ```cpp
 // Configuração da REMOTA
 const char* MQTT_CLIENT_ID = "ESP32_Remota_001";
-const char* MQTT_USERNAME = "Romota1";
-const char* MQTT_PASSWORD = "Senha1234";
+const char* MQTT_USERNAME = "SEU_USUARIO";
+const char* MQTT_PASSWORD = "SUA_SENHA";
 ```
 
 ### Certificados SSL
@@ -371,10 +371,10 @@ Serial.printf("WiFi: %s, MQTT: %s\n",
 
 ```bash
 # Subscriber (escutar mensagens)
-mosquitto_sub -h 9aa85a8cfb4a4ba896f2289aa408ba5a.s1.eu.hivemq.cloud -p 8883 -t "alimentador/remota/+" -u "Romota1" -P "Senha1234"
+mosquitto_sub -h 9aa85a8cfb4a4ba896f2289aa408ba5a.s1.eu.hivemq.cloud -p 8883 -t "alimentador/remota/+" -u "SEU_USUARIO" -P "SUA_SENHA"
 
 # Publisher (enviar comandos)
-mosquitto_pub -h 9aa85a8cfb4a4ba896f2289aa408ba5a.s1.eu.hivemq.cloud -p 8883 -t "alimentador/remota/comando" -m "PING" -u "Romota1" -P "Senha1234"
+mosquitto_pub -h 9aa85a8cfb4a4ba896f2289aa408ba5a.s1.eu.hivemq.cloud -p 8883 -t "alimentador/remota/comando" -m "PING" -u "SEU_USUARIO" -P "SUA_SENHA"
 ```
 
 #### 2. MQTT Explorer
